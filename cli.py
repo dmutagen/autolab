@@ -16,9 +16,13 @@ def main():
     parser.add_argument("--task", type=str, help="Текст задания или формулировка темы")
     parser.add_argument("--subject", type=str, default="", help="Учебный предмет (например: СУБД, Разработка ПО, ТРПО)")
     parser.add_argument("--variant", type=str, default="", help="Номер варианта")
+    parser.add_argument("--filename", type=str, default="", help="Свое имя файла отчета (например: МОБ_35)")
     parser.add_argument("--date", type=str, default="", help="Дата выполнения работы (например: 24.03.2026)")
     parser.add_argument("--theory", action="store_true", help="Добавить теоретические сведения (по умолчанию выключено)")
-    parser.add_argument("--file", type=str, help="Путь к файлу методички (PDF, DOCX или изображение)")
+    parser.add_argument("--file", type=str, help="Путь к файлу методички")
+    parser.add_argument("--files", type=str, nargs="+", help="Пути к дополнительным файлам методичек, лекций, изображений")
+    parser.add_argument("--code", type=str, help="Свой готовый исходный код или путь к файлу с кодом")
+    parser.add_argument("--screenshots", type=str, nargs="+", help="Пути к своим скриншотам программы")
     parser.add_argument("--title-page", action="store_true", help="Сгенерировать титульный лист")
     parser.add_argument("--set-key", type=str, help="Сохранить бесплатный ключ Gemini API")
     parser.add_argument("--info", action="store_true", help="Показать текущие настройки профиля студента")
@@ -50,22 +54,42 @@ def main():
     task_text = args.task or ""
     subject = args.subject or ""
     variant = args.variant or ""
-    file_path = Path(args.file) if args.file else None
     with_title = args.title_page
 
-    if args.interactive and not task_text and not file_path:
+    uploaded_files = []
+    if args.file:
+        uploaded_files.append(Path(args.file))
+    if args.files:
+        for f in args.files:
+            uploaded_files.append(Path(f))
+
+    custom_code = ""
+    if args.code:
+        code_path = Path(args.code)
+        if code_path.exists():
+            custom_code = code_path.read_text(encoding="utf-8", errors="replace")
+        else:
+            custom_code = args.code
+
+    user_screenshots = []
+    if args.screenshots:
+        for s in args.screenshots:
+            user_screenshots.append(Path(s))
+
+    if args.interactive and not task_text and not uploaded_files:
         console.print(Panel("[bold cyan]AutoLab AI — Мастер генерации лабораторной работы[/bold cyan]"))
         subject = console.input("[yellow]Введите название предмета (Enter для авто): [/yellow]").strip()
         variant = console.input("[yellow]Введите номер варианта (Enter если нет): [/yellow]").strip()
-        f_input = console.input("[yellow]Путь к файлу методички (PDF/DOCX/фото) или Enter: [/yellow]").strip()
+        f_input = console.input("[yellow]Пути к файлам методичек/материалов через пробел или Enter: [/yellow]").strip()
         if f_input:
-            file_path = Path(f_input)
+            for p_str in f_input.split():
+                uploaded_files.append(Path(p_str))
         task_text = console.input("[yellow]Текст задания или краткое описание: [/yellow]").strip()
         tp_input = console.input("[yellow]Добавить титульный лист? (д/н, по умолч. н): [/yellow]").strip().lower()
         with_title = tp_input in ["д", "y", "да", "yes"]
 
-    if not task_text and not file_path:
-        console.print("[red]Ошибка: Укажите текст задания (--task), файл методички (--file) или используйте флаг -i для интерактивного ввода.[/red]")
+    if not task_text and not uploaded_files:
+        console.print("[red]Ошибка: Укажите текст задания (--task), файлы материалов (--file / --files) или используйте флаг -i для интерактивного ввода.[/red]")
         sys.exit(1)
 
     pipeline = LabPipeline(config)
@@ -81,9 +105,12 @@ def main():
                 task_text=task_text,
                 subject=subject,
                 variant=variant,
+                custom_code=custom_code,
+                custom_filename=args.filename,
                 date_str=args.date,
                 include_theory=args.theory,
-                uploaded_file=file_path,
+                uploaded_files=uploaded_files if uploaded_files else None,
+                user_screenshots=user_screenshots if user_screenshots else None,
                 with_title_page=with_title
             )
         except Exception as e:
@@ -92,7 +119,8 @@ def main():
 
     console.print("\n[bold green]✓ Лабораторная работа успешно создана![/bold green]")
     console.print(f"[bold cyan]Файл отчета (.docx):[/bold cyan] [underline]{result['docx_path']}[/underline]")
-    console.print(f"[bold cyan]Снимок экрана:[/bold cyan] [underline]{result['screenshot_path']}[/underline]")
+    if result.get("screenshot_path"):
+        console.print(f"[bold cyan]Снимок экрана:[/bold cyan] [underline]{result['screenshot_path']}[/underline]")
     
     sol = result["solution"]
     console.print(Panel(

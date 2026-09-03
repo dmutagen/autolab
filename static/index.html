@@ -66,17 +66,21 @@
             <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Оставьте пустым для автогенерации по предмету и номеру работы</div>
           </div>
 
-          <!-- File Upload Dropzone -->
+          <!-- File Upload Dropzone (Multi-file support) -->
           <div class="form-group">
-            <label class="form-label">Файл методички, фото задания или готовый скриншот программы (PDF, DOCX, PNG, JPG)</label>
-            <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
-              <div class="dropzone-icon">📄</div>
-              <div class="dropzone-text" id="dropzoneText">
-                Перетащите методичку сюда или <strong>нажмите для выбора</strong>
-              </div>
-              <div class="file-selected" id="fileSelected" style="display: none;"></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label class="form-label" style="margin-bottom: 0;">Материалы задания, методички, фото, лекции (можно несколько файлов)</label>
+              <span style="font-size: 11px; color: #38bdf8;">PDF, DOCX, PNG, JPG, TXT</span>
             </div>
-            <input type="file" id="fileInput" style="display: none;" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.webp" onchange="handleFileSelect(event)">
+            <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+              <div class="dropzone-icon">📚</div>
+              <div class="dropzone-text" id="dropzoneText">
+                Перетащите файлы сюда или <strong>нажмите для выбора</strong> (можно выбрать сразу несколько)
+              </div>
+              <div id="filesSelectedList" style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; justify-content: center;"></div>
+            </div>
+            <input type="file" id="fileInput" style="display: none;" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.webp,.txt" multiple onchange="handleFilesSelect(event)">
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">ИИ прочитает все методички, лекции и картинки, объединит их и будет ориентироваться по всем материалам сразу.</div>
           </div>
 
           <!-- Task Description -->

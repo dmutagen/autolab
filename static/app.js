@@ -1,5 +1,6 @@
 let currentJob = null;
 let selectedFile = null;
+let selectedFiles = [];
 let selectedCodeFile = null;
 let selectedScreenshots = [];
 
@@ -94,7 +95,7 @@ function setupDropzone() {
   if (dropzone) {
     dropzone.addEventListener("drop", e => {
       const dt = e.dataTransfer;
-      if (dt.files.length > 0) setFile(dt.files[0]);
+      if (dt.files.length > 0) addReferenceFiles(Array.from(dt.files));
     });
   }
 
@@ -170,19 +171,63 @@ function renderScreenshotPreviews() {
   });
 }
 
-function handleFileSelect(event) {
-  if (event.target.files.length > 0) {
-    setFile(event.target.files[0]);
-  }
+function handleFilesSelect(event) {
+  const files = Array.from(event.target.files);
+  addReferenceFiles(files);
 }
 
-function setFile(file) {
-  selectedFile = file;
-  const fileSelected = document.getElementById("fileSelected");
-  const dropzoneText = document.getElementById("dropzoneText");
-  fileSelected.innerText = `✓ Выбран файл: ${file.name} (${(file.size / 1024).toFixed(1)} КБ)`;
-  fileSelected.style.display = "block";
-  dropzoneText.style.display = "none";
+function handleFileSelect(event) {
+  handleFilesSelect(event);
+}
+
+function addReferenceFiles(files) {
+  files.forEach(f => {
+    if (!selectedFiles.some(existing => existing.name === f.name && existing.size === f.size)) {
+      selectedFiles.push(f);
+    }
+  });
+  renderFilesSelectedList();
+}
+
+function removeReferenceFile(index, e) {
+  if (e) e.stopPropagation();
+  selectedFiles.splice(index, 1);
+  renderFilesSelectedList();
+}
+
+function renderFilesSelectedList() {
+  const container = document.getElementById("filesSelectedList");
+  const text = document.getElementById("dropzoneText");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (selectedFiles.length === 0) {
+    text.style.display = "block";
+    return;
+  }
+
+  text.style.display = "none";
+  selectedFiles.forEach((file, i) => {
+    const chip = document.createElement("div");
+    chip.className = "pill";
+    chip.style.display = "inline-flex";
+    chip.style.alignItems = "center";
+    chip.style.gap = "6px";
+    chip.style.fontSize = "12px";
+    chip.style.padding = "4px 8px";
+    chip.style.background = "rgba(14, 165, 233, 0.2)";
+    chip.style.border = "1px solid rgba(14, 165, 233, 0.4)";
+
+    let icon = "📄";
+    const nameLow = file.name.toLowerCase();
+    if (nameLow.endsWith(".pdf")) icon = "📕";
+    else if (nameLow.endsWith(".docx") || nameLow.endsWith(".doc")) icon = "📝";
+    else if (nameLow.match(/\.(png|jpe?g|webp|bmp)$/)) icon = "🖼️";
+
+    const sizeKb = (file.size / 1024).toFixed(1);
+    chip.innerHTML = icon + " " + file.name.substring(0, 20) + " (" + sizeKb + " КБ) <span onclick=\"removeReferenceFile(" + i + ", event)\" style=\"cursor: pointer; font-weight: bold; color: #f87171; margin-left: 4px;\">&times;</span>";
+    container.appendChild(chip);
+  });
 }
 
 function setSubject(name) {
@@ -227,6 +272,9 @@ async function generateLab(e) {
   if (selectedFile) {
     formData.append("file", selectedFile);
   }
+  selectedFiles.forEach(f => {
+    formData.append("files", f);
+  });
 
   const customCodeVal = document.getElementById("customCode").value;
   if (customCodeVal && customCodeVal.trim()) {

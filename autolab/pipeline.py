@@ -27,6 +27,7 @@ class LabPipeline:
         custom_filename: str = "",
         date_str: str = "",
         include_theory: bool = False,
+        uploaded_files: Optional[List[Path]] = None,
         uploaded_file: Optional[Path] = None,
         user_screenshots: Optional[List[Path]] = None,
         with_title_page: bool = False,
@@ -45,6 +46,7 @@ class LabPipeline:
         log("1. Анализ входных данных и методички...")
         input_data = TaskParser.process_input(
             text_input=task_text,
+            uploaded_files=uploaded_files,
             uploaded_file=uploaded_file,
             variant=variant
         )

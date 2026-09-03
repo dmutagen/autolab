@@ -82,6 +82,7 @@ async def generate_lab(
     with_title_page: bool = Form(False),
     custom_instructions: str = Form(""),
     file: Optional[UploadFile] = File(None),
+    files: List[UploadFile] = File(None),
     code_file: Optional[UploadFile] = File(None),
     screenshots: List[UploadFile] = File(None)
 ):
@@ -89,12 +90,21 @@ async def generate_lab(
         upload_dir = OUTPUT_DIR / "uploads"
         upload_dir.mkdir(parents=True, exist_ok=True)
 
-        # 1. Main task file (PDF / DOCX)
-        uploaded_path = None
+        # 1. Main task and reference files (PDF, DOCX, IMAGES, LECTURES)
+        uploaded_task_files = []
+        if files:
+            for f_item in files:
+                if f_item and f_item.filename:
+                    t_path = upload_dir / f_item.filename
+                    with open(t_path, "wb") as buffer:
+                        shutil.copyfileobj(f_item.file, buffer)
+                    uploaded_task_files.append(t_path)
         if file and file.filename:
-            uploaded_path = upload_dir / file.filename
-            with open(uploaded_path, "wb") as buffer:
+            t_path = upload_dir / file.filename
+            with open(t_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
+            if t_path not in uploaded_task_files:
+                uploaded_task_files.append(t_path)
 
         # 2. Custom code from file or textarea
         resolved_code = custom_code.strip() if custom_code else ""
@@ -131,7 +141,7 @@ async def generate_lab(
             custom_filename=custom_filename,
             date_str=date_str,
             include_theory=include_theory,
-            uploaded_file=uploaded_path,
+            uploaded_files=uploaded_task_files if uploaded_task_files else None,
             user_screenshots=user_screenshot_paths if user_screenshot_paths else None,
             with_title_page=with_title_page,
             custom_instructions=custom_instructions
