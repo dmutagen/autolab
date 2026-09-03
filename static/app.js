@@ -268,8 +268,13 @@ async function generateLab(e) {
   formData.append("include_theory", document.getElementById("theoryCheckbox").checked);
   formData.append("task_text", document.getElementById("taskText").value);
   const instrInput = document.getElementById("instructionsInput");
-  if (instrInput && instrInput.value.trim()) {
-    formData.append("custom_instructions", instrInput.value.trim());
+  const noCodeCb = document.getElementById("noCodeCheckbox");
+  let customInstr = instrInput && instrInput.value.trim() ? instrInput.value.trim() : "";
+  if (noCodeCb && noCodeCb.checked) {
+    customInstr = "ЭТО РАБОТА ПО ДИЗАЙНУ / МОДЕЛИРОВАНИЮ БЕЗ КОДА. Код в отчете строго НЕ нужен (поле 'code' должно быть пустым '')! Сфокусируйся на проектных решениях, макетах экранов, сетке, типографике, палитре и компонентах! " + customInstr;
+  }
+  if (customInstr) {
+    formData.append("custom_instructions", customInstr);
   }
   formData.append("with_title_page", document.getElementById("titlePageCheckbox").checked);
 

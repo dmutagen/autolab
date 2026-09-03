@@ -7,7 +7,6 @@ import re
 
 class ScreenshotEngine:
     def __init__(self):
-        # Locate the best available monospace and sans-serif fonts
         self.font_mono_path = self._find_font([
             "/usr/share/fonts/TTF/JetBrainsMonoNL-Medium.ttf",
             "/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Regular.ttf",
@@ -58,46 +57,44 @@ class ScreenshotEngine:
         if len(wrapped_lines) > 35:
             wrapped_lines = wrapped_lines[:32] + ["... [вывод сокращен] ..."]
 
-        char_height = 22
-        title_bar_height = 40
-        padding = 24
-        content_height = (len(wrapped_lines) + 3) * char_height
-        total_height = max(240, title_bar_height + content_height + padding)
-        total_width = 880
+        line_height = 24
+        header_height = 36
+        padding = 20
+        total_lines = len(wrapped_lines) + 2  # prompt + extra
+        content_height = max(total_lines * line_height, 160)
+        img_height = header_height + content_height + (padding * 2)
+        img_width = 860
 
-        bg_color = (30, 30, 46)        # Dark slate
-        bar_color = (24, 24, 37)       # Darker header
-        border_color = (69, 71, 90)    # Subtle border
-        text_color = (205, 214, 244)   # White
-        prompt_color = (137, 180, 250) # Vibrant blue
-        cmd_color = (166, 227, 161)    # Bright green
-        title_color = (186, 194, 222)  # Soft grey
-
-        img = Image.new("RGB", (total_width, total_height), color=bg_color)
+        img = Image.new("RGB", (img_width, img_height), color=(30, 30, 30))
         draw = ImageDraw.Draw(img)
 
-        # Border & Title bar
-        draw.rectangle([(0, 0), (total_width - 1, total_height - 1)], outline=border_color, width=1)
-        draw.rectangle([(0, 0), (total_width, title_bar_height)], fill=bar_color)
-        draw.line([(0, title_bar_height), (total_width, title_bar_height)], fill=border_color, width=1)
-
+        # Header Bar
+        draw.rectangle([(0, 0), (img_width, header_height)], fill=(45, 45, 45))
         # Window buttons
-        draw.ellipse([(16, 14), (28, 26)], fill=(243, 139, 168))
-        draw.ellipse([(36, 14), (48, 26)], fill=(249, 226, 175))
-        draw.ellipse([(56, 14), (68, 26)], fill=(166, 227, 161))
-        draw.text((90, 11), title, fill=title_color, font=small_font)
+        btn_radius = 6
+        draw.ellipse([(14, 12), (14 + btn_radius * 2, 12 + btn_radius * 2)], fill=(255, 95, 86))
+        draw.ellipse([(34, 12), (34 + btn_radius * 2, 12 + btn_radius * 2)], fill=(255, 189, 46))
+        draw.ellipse([(54, 12), (54 + btn_radius * 2, 12 + btn_radius * 2)], fill=(39, 201, 63))
 
-        # Command prompt
-        curr_y = title_bar_height + 16
-        prompt_str = "mugo@arch:~/labs$ "
-        draw.text((20, curr_y), prompt_str, fill=prompt_color, font=font)
-        draw.text((20 + len(prompt_str) * 9, curr_y), command, fill=cmd_color, font=font)
-        curr_y += char_height + 4
+        # Title
+        draw.text((80, 10), title, fill=(180, 180, 180), font=small_font)
 
-        # Output text
+        # Body
+        y = header_height + padding
+        # Terminal prompt
+        draw.text((padding, y), "mugo@arch:~/labs$ ", fill=(134, 239, 172), font=font)
+        prompt_len = 165
+        draw.text((padding + prompt_len, y), command, fill=(243, 244, 246), font=font)
+        y += line_height + 4
+
         for line in wrapped_lines:
-            draw.text((20, curr_y), line, fill=text_color, font=font)
-            curr_y += char_height
+            color = (229, 231, 235)
+            if "error" in line.lower() or "ошибка" in line.lower():
+                color = (248, 113, 113)
+            elif "success" in line.lower() or "успешно" in line.lower():
+                color = (74, 222, 128)
+            draw.text((padding, y), line, fill=color, font=font)
+            y += line_height
 
         output_image_path.parent.mkdir(parents=True, exist_ok=True)
         img.save(str(output_image_path))
@@ -110,94 +107,46 @@ class ScreenshotEngine:
         code: str,
         output_image_path: Path
     ) -> Path:
-        """Renders a realistic modern Android smartphone app screen."""
-        width = 420
-        height = 740
-        font_regular = self._get_font(14, mono=False)
-        font_bold = self._get_font(16, mono=False)
-        font_small = self._get_font(12, mono=False)
-
-        img = Image.new("RGB", (width, height), color=(248, 250, 252))
+        width, height = 400, 680
+        img = Image.new("RGB", (width, height), (248, 250, 252))
         draw = ImageDraw.Draw(img)
 
-        # 1. Outer phone frame with rounded corners
-        draw.rounded_rectangle([(0, 0), (width - 1, height - 1)], radius=28, outline=(51, 65, 85), width=3)
+        font_header = self._get_font(16, mono=False)
+        font_body = self._get_font(13, mono=False)
+        font_small = self._get_font(11, mono=False)
 
-        # 2. Android Status Bar (top)
-        draw.rectangle([(0, 0), (width, 36)], fill=(15, 23, 42))
-        draw.text((28, 10), "12:30", fill=(248, 250, 252), font=font_small)
-        draw.text((width - 85, 10), "5G  100%", fill=(248, 250, 252), font=font_small)
-        # Speaker slit
-        draw.rounded_rectangle([(width//2 - 25, 8), (width//2 + 25, 14)], radius=3, fill=(71, 85, 105))
+        # 1. Android Status Bar
+        draw.rectangle([(0, 0), (width, 28)], fill=(15, 23, 42))
+        draw.text((16, 6), "12:00", fill=(255, 255, 255), font=font_small)
+        draw.text((width - 85, 6), "LTE  100%", fill=(255, 255, 255), font=font_small)
 
-        # 3. Action Bar (Toolbar)
-        app_name = "MobileApp"
-        if "com.example." in code:
-            m = re.search(r'com\.example\.(\w+)', code)
-            if m:
-                app_name = m.group(1).capitalize()
-        elif title:
-            app_name = title[:24]
+        # 2. Android App Toolbar
+        draw.rectangle([(0, 28), (width, 84)], fill=(37, 99, 235))
+        draw.text((20, 44), title[:28] if title else "Android App", fill=(255, 255, 255), font=font_header)
 
-        draw.rectangle([(0, 36), (width, 94)], fill=(37, 99, 235))
-        draw.text((24, 54), app_name, fill=(255, 255, 255), font=font_bold)
+        # 3. Dynamic Card / Visual Area
+        draw.rounded_rectangle([(24, 108), (width - 24, 340)], radius=12, fill=(255, 255, 255), outline=(226, 232, 240), width=1)
+        
+        # Center illustrative graphic
+        center_x, center_y = width // 2, 200
+        draw.ellipse([(center_x - 45, center_y - 45), (center_x + 45, center_y + 45)], fill=(219, 234, 254))
+        draw.rounded_rectangle([(center_x - 20, center_y - 20), (center_x + 20, center_y + 20)], radius=6, fill=(37, 99, 235))
+        draw.ellipse([(center_x - 8, center_y - 8), (center_x + 8, center_y + 8)], fill=(255, 255, 255))
+        
+        # Labels
+        short_topic = topic[:45] if topic else "Демонстрация работы приложения"
+        draw.text((44, 270), short_topic, fill=(30, 41, 59), font=font_body)
+        draw.text((44, 298), "Статус: Активно • Выполнение успешно", fill=(16, 185, 129), font=font_small)
 
-        # 4. App Screen Body (Material Design components)
-        # Determine theme of lab: animation, broadcast, db, or form
-        is_anim = "anim" in code.lower() or "anim" in topic.lower()
-        is_broadcast = "broadcast" in code.lower() or "receiver" in code.lower()
-        is_db = "sqlite" in code.lower() or "db" in code.lower() or "database" in code.lower()
-
-        if is_anim:
-            # Target image card
-            draw.rounded_rectangle([(width//2 - 65, 130), (width//2 + 65, 250)], radius=16, fill=(219, 234, 254), outline=(147, 197, 253), width=2)
-            draw.ellipse([(width//2 - 35, 160), (width//2 + 35, 220)], fill=(59, 130, 246))
-            draw.text((width//2 - 40, 260), "targetImage", fill=(100, 116, 139), font=font_small)
-
-            # Action buttons
-            btns = ["Translate (Перемещение)", "Rotate (Вращение)", "Scale + Alpha (Масштаб)"]
-            y = 310
-            for b_txt in btns:
-                draw.rounded_rectangle([(40, y), (width - 40, y + 46)], radius=10, fill=(37, 99, 235))
-                draw.text((55, y + 14), b_txt, fill=(255, 255, 255), font=font_regular)
-                y += 64
-
-            # Toast notification
-            toast_y = 590
-            draw.rounded_rectangle([(45, toast_y), (width - 45, toast_y + 40)], radius=20, fill=(30, 41, 59))
-            draw.text((65, toast_y + 11), "Анимация успешно запущена", fill=(241, 245, 249), font=font_small)
-
-        elif is_broadcast:
-            # Broadcast receiver UI
-            draw.text((32, 130), "Широковещательные сообщения", fill=(15, 23, 42), font=font_bold)
-            draw.rounded_rectangle([(32, 170), (width - 32, 230)], radius=10, fill=(241, 245, 249), outline=(203, 213, 225))
-            draw.text((44, 192), "Сообщение: Hello Broadcast!", fill=(71, 85, 105), font=font_regular)
-
-            draw.rounded_rectangle([(40, 260), (width - 40, y + 50)], radius=10, fill=(37, 99, 235))
-            draw.text((70, 274), "Отправить Broadcast сообщение", fill=(255, 255, 255), font=font_regular)
-
-            toast_y = 590
-            draw.rounded_rectangle([(40, toast_y), (width - 40, toast_y + 42)], radius=20, fill=(30, 41, 59))
-            draw.text((55, toast_y + 12), "Toast: BroadcastReceiver сработал!", fill=(241, 245, 249), font=font_small)
-
-        else:
-            # General UI: card, form fields, and submit button
-            draw.text((32, 120), "Лабораторная работа", fill=(15, 23, 42), font=font_bold)
-            draw.text((32, 150), topic[:38] if topic else "Демонстрация работы", fill=(71, 85, 105), font=font_small)
-
-            # Input card
-            draw.rounded_rectangle([(32, 180), (width - 32, 230)], radius=8, fill=(255, 255, 255), outline=(203, 213, 225))
-            draw.text((44, 196), "Введите значение...", fill=(148, 163, 184), font=font_regular)
-
-            # Button
-            draw.rounded_rectangle([(32, 250), (width - 32, 296)], radius=8, fill=(37, 99, 235))
-            draw.text((width//2 - 40, 265), "Выполнить", fill=(255, 255, 255), font=font_bold)
-
-            # Result card
-            draw.rounded_rectangle([(32, 320), (width - 32, 460)], radius=12, fill=(255, 255, 255), outline=(226, 232, 240))
-            draw.text((44, 335), "Результаты обработки:", fill=(15, 23, 42), font=font_bold)
-            draw.text((44, 370), "Статус: Успешно выполнено", fill=(22, 163, 74), font=font_regular)
-            draw.text((44, 400), "Данные обработаны без ошибок", fill=(71, 85, 105), font=font_small)
+        # 4. Buttons
+        buttons = ["Запустить анимацию", "Сброс / Reset"]
+        btn_y = 364
+        for i, b_text in enumerate(buttons):
+            b_bg = (37, 99, 235) if i == 0 else (241, 245, 249)
+            b_fg = (255, 255, 255) if i == 0 else (71, 85, 105)
+            draw.rounded_rectangle([(24, btn_y), (width - 24, btn_y + 46)], radius=8, fill=b_bg)
+            draw.text((width // 2 - len(b_text) * 3 - 10, btn_y + 14), b_text, fill=b_fg, font=font_body)
+            btn_y += 58
 
         # 5. Bottom Navigation Bar
         nav_y = height - 48
@@ -205,6 +154,78 @@ class ScreenshotEngine:
         draw.polygon([(width//4 - 8, nav_y + 24), (width//4 + 6, nav_y + 14), (width//4 + 6, nav_y + 34)], fill=(203, 213, 225))
         draw.ellipse([(width//2 - 7, nav_y + 17), (width//2 + 7, nav_y + 31)], fill=(203, 213, 225))
         draw.rectangle([(3*width//4 - 7, nav_y + 17), (3*width//4 + 7, nav_y + 31)], fill=(203, 213, 225))
+
+        output_image_path.parent.mkdir(parents=True, exist_ok=True)
+        img.save(str(output_image_path))
+        return output_image_path
+
+    def render_ui_wireframe(
+        self,
+        title: str,
+        topic: str,
+        output_image_path: Path
+    ) -> Path:
+        width, height = 900, 560
+        img = Image.new("RGB", (width, height), (248, 250, 252))
+        draw = ImageDraw.Draw(img)
+
+        font_header = self._get_font(15, mono=False)
+        font_body = self._get_font(13, mono=False)
+        font_small = self._get_font(11, mono=False)
+
+        # 1. Figma / Browser Frame Bar
+        draw.rectangle([(0, 0), (width, 44)], fill=(226, 232, 240))
+        draw.ellipse([(16, 16), (28, 28)], fill=(239, 68, 68))
+        draw.ellipse([(36, 16), (48, 28)], fill=(245, 158, 11))
+        draw.ellipse([(56, 16), (68, 28)], fill=(16, 185, 129))
+        draw.rounded_rectangle([(100, 10), (width - 120, 34)], radius=6, fill=(255, 255, 255))
+        draw.text((120, 14), f"Figma / Web Prototype — {topic[:50]}", fill=(100, 116, 139), font=font_small)
+
+        # 2. Navigation Bar
+        draw.rectangle([(0, 44), (width, 100)], fill=(255, 255, 255))
+        draw.line([(0, 100), (width, 100)], fill=(226, 232, 240), width=1)
+        draw.rounded_rectangle([(30, 58), (140, 86)], radius=6, fill=(37, 99, 235))
+        draw.text((45, 64), "UI Project", fill=(255, 255, 255), font=font_body)
+        links = ["Главная", "Разделы", "Компоненты", "Профиль"]
+        for i, link in enumerate(links):
+            draw.text((200 + i * 110, 66), link, fill=(71, 85, 105), font=font_body)
+        draw.rounded_rectangle([(width - 160, 58), (width - 30, 86)], radius=6, fill=(16, 185, 129))
+        draw.text((width - 135, 64), "Действие / CTA", fill=(255, 255, 255), font=font_body)
+
+        # 3. Hero / Main Concept Section
+        draw.rectangle([(0, 101), (width, 260)], fill=(241, 245, 249))
+        draw.text((40, 125), topic[:55] if topic else "Разработка структуры пользовательского интерфейса", fill=(15, 23, 42), font=font_header)
+        draw.text((40, 155), "Концепт интерактивного макета, адаптивная сетка (12-column grid) и дизайн-система", fill=(100, 116, 139), font=font_small)
+        draw.rounded_rectangle([(40, 195), (180, 230)], radius=6, fill=(37, 99, 235))
+        draw.text((65, 205), "Подробнее", fill=(255, 255, 255), font=font_body)
+        draw.rounded_rectangle([(width - 320, 120), (width - 40, 245)], radius=10, fill=(255, 255, 255), outline=(203, 213, 225), width=2)
+        draw.text((width - 240, 175), "UI Component Area", fill=(148, 163, 184), font=font_small)
+
+        # 4. Content Cards Grid
+        card_w = (width - 80 - 40) // 3
+        for i in range(3):
+            cx = 40 + i * (card_w + 20)
+            cy = 280
+            draw.rounded_rectangle([(cx, cy), (cx + card_w, cy + 160)], radius=8, fill=(255, 255, 255), outline=(226, 232, 240), width=1)
+            draw.rounded_rectangle([(cx + 10, cy + 10), (cx + card_w - 10, cy + 80)], radius=6, fill=(241, 245, 249))
+            draw.text((cx + card_w//2 - 35, cy + 40), f"Модуль {i+1}", fill=(100, 116, 139), font=font_small)
+            draw.text((cx + 15, cy + 95), f"Элемент интерфейса №{i+1}", fill=(30, 41, 59), font=font_body)
+            draw.text((cx + 15, cy + 120), "Сетка: 12 колонок / Auto-layout", fill=(148, 163, 184), font=font_small)
+
+        # 5. Color Palette & Typography Footer
+        draw.rectangle([(0, height - 70), (width, height)], fill=(255, 255, 255))
+        draw.line([(0, height - 70), (width, height - 70)], fill=(226, 232, 240), width=1)
+        draw.text((40, height - 50), "Цветовая палитра: ", fill=(71, 85, 105), font=font_body)
+        palette = [
+            ((37, 99, 235), "#2563EB Primary"),
+            ((16, 185, 129), "#10B981 Success"),
+            ((245, 158, 11), "#F59E0B Accent"),
+            ((15, 23, 42), "#0F172A Dark")
+        ]
+        for i, (col, label) in enumerate(palette):
+            bx = 180 + i * 160
+            draw.rounded_rectangle([(bx, height - 54), (bx + 20, height - 34)], radius=4, fill=col)
+            draw.text((bx + 26, height - 50), label, fill=(100, 116, 139), font=font_small)
 
         output_image_path.parent.mkdir(parents=True, exist_ok=True)
         img.save(str(output_image_path))
@@ -219,10 +240,25 @@ class ScreenshotEngine:
         output_text: str,
         output_image_path: Path
     ) -> Path:
-        """Intelligently detects whether to render an Android screen or Terminal window."""
+        """Intelligently detects whether to render an Android screen, UI Wireframe, or Terminal window."""
         subj_lower = (subject or "").lower()
         code_lower = (code or "").lower()
-        
+        topic_lower = (topic or "").lower()
+
+        is_design = (
+            "дизайн" in subj_lower or
+            "дизайн" in topic_lower or
+            "design" in subj_lower or
+            "design" in topic_lower or
+            "figma" in subj_lower or
+            "figma" in topic_lower or
+            "макет" in subj_lower or
+            "макет" in topic_lower or
+            "ui" in subj_lower or
+            "ux" in subj_lower or
+            ("интерфейс" in topic_lower and not code.strip())
+        )
+
         is_mobile = (
             "мобил" in subj_lower or
             "android" in subj_lower or
@@ -232,7 +268,13 @@ class ScreenshotEngine:
             "activity" in code_lower
         )
 
-        if is_mobile:
+        if is_design:
+            return self.render_ui_wireframe(
+                title=subject or "UI/UX Design Mockup",
+                topic=topic or "Разработка интерфейса пользователя",
+                output_image_path=output_image_path
+            )
+        elif is_mobile:
             return self.render_mobile_screen(
                 title=subject or "Android Application",
                 topic=topic,

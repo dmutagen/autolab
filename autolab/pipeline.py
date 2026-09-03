@@ -70,14 +70,23 @@ class LabPipeline:
         code_filename = solution.get("code_filename", "main.py")
         test_inputs = solution.get("test_inputs", "")
 
-        # Step 3: Execution Sandbox (if not mobile and not provided custom code)
+        # Step 3: Execution Sandbox (only if lab requires code)
         output_text = ""
-        is_mobile = "мобил" in (subject or "").lower() or "android" in (subject or "").lower() or "androidx" in code.lower()
+        clean_code = (code or "").strip()
+        is_mobile = "мобил" in (subject or "").lower() or "android" in (subject or "").lower() or "androidx" in clean_code.lower()
 
-        if not is_mobile:
+        if not clean_code:
+            log("3. Анализ концепции проекта, макета и дизайн-решений...")
+            exec_result = {"success": True, "stdout": "Дизайн-проект сформирован успешно"}
+            output_text = "Дизайн пользовательского интерфейса разработан"
+        elif is_mobile:
+            log("3. Анализ архитектуры мобильного приложения...")
+            exec_result = {"success": True, "stdout": "Android приложение собрано успешно"}
+            output_text = "Android приложение запущено"
+        else:
             log(f"3. Компиляция и запуск {code_lang}-кода в изолированной песочнице...")
             exec_result = self.executor.execute(
-                code=code,
+                code=clean_code,
                 language=code_lang,
                 filename=code_filename,
                 test_inputs=test_inputs
@@ -91,10 +100,6 @@ class LabPipeline:
                     output_text = "Вывод программы:\n" + exec_result.get("stderr")
                 else:
                     output_text = "Программа выполнена успешно (код возврата 0)."
-        else:
-            log("3. Анализ архитектуры мобильного приложения...")
-            exec_result = {"success": True, "stdout": "Android приложение собрано успешно"}
-            output_text = "Android приложение запущено"
 
         # Step 4: Handle Screenshots (User-uploaded or Auto-generated)
         screenshots_to_embed = []

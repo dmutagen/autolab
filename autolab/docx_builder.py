@@ -77,6 +77,8 @@ def get_short_filename(subject: str, lab_number: str) -> str:
     s = (subject or "").lower().strip()
     if any(w in s for w in ["трпо"]):
         return f"ТРПО_{num}.docx"
+    elif any(w in s for w in ["дизайн", "design", "ui", "ux", "figma", "макет"]):
+        return f"дизайн_{num}.docx"
     elif any(w in s for w in ["мобил", "android"]):
         return f"МОБ_{num}.docx"
     elif any(w in s for w in ["субд", "баз", "данн", "sql", "sqlite", "access"]):
@@ -305,26 +307,32 @@ class DocxBuilder:
         # Section: Результаты выполнения работы
         self._add_paragraph("Результаты выполнения работы:")
 
-        # If theory checkbox is OFF -> NO explanatory text, NO steps, ONLY CODE!
-        if include_theory:
-            theory = data.get("theory", "").strip()
-            if theory:
-                self._add_text_block(theory)
+        code = data.get("code", "").strip()
+        sol_desc = data.get("solution_description", "").strip()
 
-            sol_desc = data.get("solution_description", "").strip()
+        if code:
+            # Coding lab:
+            if include_theory:
+                theory = data.get("theory", "").strip()
+                if theory:
+                    self._add_text_block(theory)
+                if sol_desc:
+                    self._add_text_block(sol_desc)
+            self.add_code_block(code)
+        else:
+            # Design / Non-coding lab (Figma, UI/UX, Schemes, Modeling):
+            if include_theory:
+                theory = data.get("theory", "").strip()
+                if theory:
+                    self._add_text_block(theory)
             if sol_desc:
                 self._add_text_block(sol_desc)
-
-        # Code block (immediately follows if include_theory is False!)
-        code = data.get("code", "").strip()
-        if code:
-            self.add_code_block(code)
 
         # Screenshots (can be multiple)
         fig_no = 1
         figures_meta = data.get("figures", [])
         for i, shot in enumerate(screenshots):
-            cap = "Результат выполнения программы"
+            cap = "Макет разработанного интерфейса" if not code else "Результат выполнения программы"
             if i < len(figures_meta) and "title" in figures_meta[i]:
                 cap = figures_meta[i]["title"]
             elif len(screenshots) > 1:
