@@ -89,6 +89,13 @@
             <textarea id="taskText" class="form-textarea" placeholder="Вставьте формулировку задания, тему лабораторной, фрагмент методички или вопросы..."></textarea>
           </div>
 
+          <!-- Custom AI Instructions -->
+          <div class="form-group">
+            <label class="form-label" for="instructionsInput">Пожелания / Указания для ИИ (необязательно)</label>
+            <input type="text" id="instructionsInput" class="form-input" placeholder="Например: напиши код на Kotlin; используй ConstraintLayout; ответь на вопросы кратко...">
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Инструкции передаются нейросети и НЕ попадут в текст готового отчета.</div>
+          </div>
+
           <!-- Custom Code Input -->
           <div class="form-group">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">

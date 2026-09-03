@@ -267,6 +267,10 @@ async function generateLab(e) {
   formData.append("date_str", document.getElementById("dateInput").value);
   formData.append("include_theory", document.getElementById("theoryCheckbox").checked);
   formData.append("task_text", document.getElementById("taskText").value);
+  const instrInput = document.getElementById("instructionsInput");
+  if (instrInput && instrInput.value.trim()) {
+    formData.append("custom_instructions", instrInput.value.trim());
+  }
   formData.append("with_title_page", document.getElementById("titlePageCheckbox").checked);
 
   if (selectedFile) {
