@@ -13,6 +13,58 @@ def normalize_dashes(text: str) -> str:
         return ""
     return text.replace("—", "–")
 
+def clean_markdown(text: str) -> str:
+    """Strip raw markdown artifacts like **bold**, `code`, and markdown headers."""
+    if not text:
+        return ""
+    # Strip markdown code blocks
+    text = re.sub(r'```[a-zA-Z]*\n?', '', text)
+    text = text.replace('```', '')
+    # Strip bold asterisks: **text** -> text
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)
+    # Strip inline backticks: `code` -> code
+    text = re.sub(r'`([^`]+)`', r'\1', text)
+    # Strip markdown headers: ### Header -> Header
+    text = re.sub(r'^\s*#{1,6}\s+', '', text, flags=re.MULTILINE)
+    return text.strip()
+
+def normalize_paragraphs(text: str) -> List[str]:
+    """
+    Split text into coherent paragraphs and list items, un-wrapping artificial
+    line breaks so that Word JUSTIFY does not stretch words across the entire page.
+    """
+    if not text:
+        return []
+
+    clean_text = clean_markdown(normalize_dashes(text))
+    raw_blocks = clean_text.split("\n\n")
+    paragraphs = []
+
+    for block in raw_blocks:
+        lines = [l.strip() for l in block.split("\n") if l.strip()]
+        if not lines:
+            continue
+
+        current = []
+        for line in lines:
+            # Check if line starts a list item: '1. ', '- ', '• '
+            is_list_item = bool(re.match(r'^(?:\d+[\.\)]|[-•*])\s+', line))
+            if is_list_item:
+                if current:
+                    paragraphs.append(" ".join(current))
+                    current = []
+                current.append(line)
+            else:
+                if current:
+                    current.append(line)
+                else:
+                    current.append(line)
+
+        if current:
+            paragraphs.append(" ".join(current))
+
+    return paragraphs
+
 def get_short_filename(subject: str, lab_number: str) -> str:
     """Generate short filenames matching the student's catalog: МОБ_5.docx, разраб2.docx, СУБД_1.docx, etc."""
     num_match = re.search(r'\d+(?:[\.\-_]\d+)?', str(lab_number))
@@ -53,6 +105,7 @@ class DocxBuilder:
         section = self.doc.sections[0]
         section.page_width = Mm(210)
         section.page_height = Mm(297)
+        # Belarusian GOST: Left 30 mm, Right 10 mm, Top 20 mm, Bottom 20 mm
         section.left_margin = Mm(self.config.gost.margin_left_mm)
         section.right_margin = Mm(self.config.gost.margin_right_mm)
         section.top_margin = Mm(self.config.gost.margin_top_mm)
@@ -94,7 +147,7 @@ class DocxBuilder:
                 p.paragraph_format.first_line_indent = Mm(self.config.gost.first_line_indent_cm * 10)
 
         if text:
-            clean_text = normalize_dashes(text)
+            clean_text = clean_markdown(normalize_dashes(text))
             run = p.add_run(clean_text)
             run.font.name = 'Times New Roman'
             run.font.size = Pt(font_size_pt or 14)
@@ -103,6 +156,13 @@ class DocxBuilder:
             if italic:
                 run.italic = True
         return p
+
+    def _add_text_block(self, text: str, bold: bool = False, prefix: str = ""):
+        """Add multi-paragraph text cleanly without stretching line breaks."""
+        paras = normalize_paragraphs(text)
+        for i, p_text in enumerate(paras):
+            full_text = f"{prefix}{p_text}" if i == 0 and prefix else p_text
+            self._add_paragraph(full_text, bold=bold)
 
     def add_header(self, data: Dict[str, Any], user_variant: str = ""):
         lab_type = data.get("lab_type", "Лабораторная работа")
@@ -132,27 +192,34 @@ class DocxBuilder:
             
         self._add_paragraph(f"Дата выполнения работы: {date_str}")
 
-        topic = data.get("topic", "").strip("«»\" ")
+        topic = clean_markdown(data.get("topic", "").strip("«»\" "))
         self._add_paragraph(f"Тема работы: «{topic}»")
 
-        goal = data.get("goal", "").strip()
-        self._add_paragraph(f"Цель работы: {goal}")
+        goal = clean_markdown(data.get("goal", "").strip())
+        if goal:
+            self._add_text_block(goal, prefix="Цель работы: ")
 
-        task = data.get("task", "").strip()
-        self._add_paragraph(f"Задание: {task}")
+        task = clean_markdown(data.get("task", "").strip())
+        if task:
+            self._add_text_block(task, prefix="Задание: ")
 
         # ONLY add variant if user entered a variant explicitly on the site!
         clean_var = user_variant.strip() if user_variant else ""
         if clean_var and clean_var.lower() not in ["общий", "согласно заданию", "нет", "none", "-"]:
             self._add_paragraph(f"Вариант: {clean_var}")
 
-        equip = data.get("equipment", "").strip()
+        equip = clean_markdown(data.get("equipment", "").strip())
         if equip:
-            self._add_paragraph(f"Оснащение работы: {equip}")
+            self._add_text_block(equip, prefix="Оснащение работы: ")
 
     def add_code_block(self, code: str):
         self._add_paragraph("Код программы:")
-        lines = code.strip().split("\n")
+        clean_code = code.strip()
+        # Remove any markdown code fences if AI returned them
+        clean_code = re.sub(r'^```[a-zA-Z]*\n', '', clean_code)
+        clean_code = re.sub(r'\n```$', '', clean_code)
+        
+        lines = clean_code.split("\n")
         for line in lines:
             p = self.doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.LEFT
@@ -179,7 +246,7 @@ class DocxBuilder:
         run_img = p_img.add_run()
         run_img.add_picture(str(image_path), width=Mm(160))
 
-        clean_cap = normalize_dashes(caption.strip(". "))
+        clean_cap = clean_markdown(normalize_dashes(caption.strip(". ")))
         self._add_paragraph(
             f"Рисунок {figure_number} – {clean_cap}",
             alignment=WD_ALIGN_PARAGRAPH.CENTER,
@@ -204,7 +271,7 @@ class DocxBuilder:
         
         topic = data.get("topic", "")
         if topic:
-            self._add_paragraph(f"«{topic}»", alignment=WD_ALIGN_PARAGRAPH.CENTER, indent_cm=0)
+            self._add_paragraph(f"«{clean_markdown(topic)}»", alignment=WD_ALIGN_PARAGRAPH.CENTER, indent_cm=0)
 
         for _ in range(4):
             self._add_paragraph("", indent_cm=0)
@@ -238,24 +305,26 @@ class DocxBuilder:
         if include_theory:
             theory = data.get("theory", "").strip()
             if theory:
-                self._add_paragraph(theory)
+                self._add_text_block(theory)
 
         sol_desc = data.get("solution_description", "").strip()
         if sol_desc:
-            self._add_paragraph(sol_desc)
+            self._add_text_block(sol_desc)
 
         # Code block
         code = data.get("code", "").strip()
         if code:
             self.add_code_block(code)
 
-        # Screenshots
+        # Screenshots (can be multiple)
         fig_no = 1
         figures_meta = data.get("figures", [])
         for i, shot in enumerate(screenshots):
             cap = "Результат выполнения программы"
             if i < len(figures_meta) and "title" in figures_meta[i]:
                 cap = figures_meta[i]["title"]
+            elif len(screenshots) > 1:
+                cap = f"Интерфейс программы (часть {i+1})"
             self.add_screenshot(shot, fig_no, cap)
             fig_no += 1
 
@@ -264,15 +333,15 @@ class DocxBuilder:
         if qa_list:
             self._add_paragraph("Ответы на контрольные вопросы:")
             for i, qa in enumerate(qa_list):
-                raw_q = qa.get("question", "").strip()
+                raw_q = clean_markdown(qa.get("question", "").strip())
                 clean_q = re.sub(r'^\s*(\d+[\.\)]\s*)+', '', raw_q).strip()
-                a = qa.get("answer", "").strip()
+                a = clean_markdown(qa.get("answer", "").strip())
                 
                 self._add_paragraph(f"{i+1}. {clean_q}")
-                self._add_paragraph(a)
+                self._add_text_block(a)
 
         # Conclusion: Вывод
-        concl = data.get("conclusion", "").strip()
+        concl = clean_markdown(data.get("conclusion", "").strip())
         if concl:
             if concl.lower().startswith("вывод:"):
                 concl_text = concl[6:].strip()

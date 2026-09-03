@@ -75,21 +75,50 @@ async def generate_lab(
     task_text: str = Form(""),
     subject: str = Form(""),
     variant: str = Form(""),
+    custom_code: str = Form(""),
     custom_filename: str = Form(""),
     date_str: str = Form(""),
     include_theory: bool = Form(False),
     with_title_page: bool = Form(False),
     custom_instructions: str = Form(""),
-    file: Optional[UploadFile] = File(None)
+    file: Optional[UploadFile] = File(None),
+    code_file: Optional[UploadFile] = File(None),
+    screenshots: List[UploadFile] = File(None)
 ):
     try:
+        upload_dir = OUTPUT_DIR / "uploads"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+
+        # 1. Main task file (PDF / DOCX)
         uploaded_path = None
         if file and file.filename:
-            upload_dir = OUTPUT_DIR / "uploads"
-            upload_dir.mkdir(parents=True, exist_ok=True)
             uploaded_path = upload_dir / file.filename
             with open(uploaded_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
+
+        # 2. Custom code from file or textarea
+        resolved_code = custom_code.strip() if custom_code else ""
+        if code_file and code_file.filename:
+            c_path = upload_dir / code_file.filename
+            with open(c_path, "wb") as buffer:
+                shutil.copyfileobj(code_file.file, buffer)
+            try:
+                with open(c_path, "r", encoding="utf-8", errors="replace") as f:
+                    file_code = f.read().strip()
+                    if file_code:
+                        resolved_code = file_code
+            except Exception as e:
+                print(f"Warning: Failed to read code file {c_path}: {e}")
+
+        # 3. User screenshots
+        user_screenshot_paths = []
+        if screenshots:
+            for s_file in screenshots:
+                if s_file and s_file.filename:
+                    s_path = upload_dir / f"user_shot_{s_file.filename}"
+                    with open(s_path, "wb") as buffer:
+                        shutil.copyfileobj(s_file.file, buffer)
+                    user_screenshot_paths.append(s_path)
 
         cfg = load_config()
         pipeline = LabPipeline(cfg)
@@ -98,10 +127,12 @@ async def generate_lab(
             task_text=task_text,
             subject=subject,
             variant=variant,
+            custom_code=resolved_code,
             custom_filename=custom_filename,
             date_str=date_str,
             include_theory=include_theory,
             uploaded_file=uploaded_path,
+            user_screenshots=user_screenshot_paths if user_screenshot_paths else None,
             with_title_page=with_title_page,
             custom_instructions=custom_instructions
         )

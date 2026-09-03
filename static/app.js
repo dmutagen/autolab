@@ -1,5 +1,7 @@
 let currentJob = null;
 let selectedFile = null;
+let selectedCodeFile = null;
+let selectedScreenshots = [];
 
 document.addEventListener("DOMContentLoaded", () => {
   loadConfig();
@@ -69,29 +71,102 @@ async function loadHistory() {
 // Drag and drop setup
 function setupDropzone() {
   const dropzone = document.getElementById("dropzone");
-  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-    dropzone.addEventListener(eventName, preventDefaults, false);
-  });
+  const sDropzone = document.getElementById("screenshotDropzone");
 
   function preventDefaults(e) {
     e.preventDefault();
     e.stopPropagation();
   }
 
-  ['dragenter', 'dragover'].forEach(eventName => {
-    dropzone.addEventListener(eventName, () => dropzone.classList.add("dragover"), false);
+  [dropzone, sDropzone].forEach(zone => {
+    if (!zone) return;
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev => {
+      zone.addEventListener(ev, preventDefaults, false);
+    });
+    ['dragenter', 'dragover'].forEach(ev => {
+      zone.addEventListener(ev, () => zone.classList.add("dragover"), false);
+    });
+    ['dragleave', 'drop'].forEach(ev => {
+      zone.addEventListener(ev, () => zone.classList.remove("dragover"), false);
+    });
   });
 
-  ['dragleave', 'drop'].forEach(eventName => {
-    dropzone.addEventListener(eventName, () => dropzone.classList.remove("dragover"), false);
-  });
+  if (dropzone) {
+    dropzone.addEventListener("drop", e => {
+      const dt = e.dataTransfer;
+      if (dt.files.length > 0) setFile(dt.files[0]);
+    });
+  }
 
-  dropzone.addEventListener("drop", e => {
-    const dt = e.dataTransfer;
-    const files = dt.files;
-    if (files.length > 0) {
-      setFile(files[0]);
+  if (sDropzone) {
+    sDropzone.addEventListener("drop", e => {
+      const dt = e.dataTransfer;
+      if (dt.files.length > 0) addScreenshots(Array.from(dt.files));
+    });
+  }
+}
+
+function handleCodeFileSelect(event) {
+  if (event.target.files.length > 0) {
+    const file = event.target.files[0];
+    selectedCodeFile = file;
+    const indicator = document.getElementById("codeFileSelected");
+    const sizeKb = (file.size / 1024).toFixed(1);
+    indicator.innerText = "✓ Выбран файл с кодом: " + file.name + " (" + sizeKb + " КБ)";
+    indicator.style.display = "block";
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      document.getElementById("customCode").value = e.target.result;
+    };
+    reader.readAsText(file);
+  }
+}
+
+function handleScreenshotsSelect(event) {
+  const files = Array.from(event.target.files);
+  addScreenshots(files);
+}
+
+function addScreenshots(files) {
+  files.forEach(f => {
+    if (f.type.startsWith("image/") || f.name.match(/\.(png|jpe?g|webp|bmp)$/i)) {
+      selectedScreenshots.push(f);
     }
+  });
+  renderScreenshotPreviews();
+}
+
+function removeScreenshot(index, e) {
+  if (e) e.stopPropagation();
+  selectedScreenshots.splice(index, 1);
+  renderScreenshotPreviews();
+}
+
+function renderScreenshotPreviews() {
+  const container = document.getElementById("screenshotPreviews");
+  const text = document.getElementById("screenshotDropzoneText");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (selectedScreenshots.length === 0) {
+    text.style.display = "block";
+    return;
+  }
+
+  text.style.display = "none";
+  selectedScreenshots.forEach((file, i) => {
+    const chip = document.createElement("div");
+    chip.className = "pill";
+    chip.style.display = "inline-flex";
+    chip.style.alignItems = "center";
+    chip.style.gap = "6px";
+    chip.style.fontSize = "12px";
+    chip.style.padding = "4px 8px";
+    chip.style.background = "rgba(59, 130, 246, 0.2)";
+    chip.style.border = "1px solid rgba(59, 130, 246, 0.4)";
+    chip.innerHTML = "🖼️ " + file.name.substring(0, 16) + "... <span onclick=\"removeScreenshot(" + i + ", event)\" style=\"cursor: pointer; font-weight: bold; color: #f87171; margin-left: 4px;\">&times;</span>";
+    container.appendChild(chip);
   });
 }
 
@@ -152,6 +227,17 @@ async function generateLab(e) {
   if (selectedFile) {
     formData.append("file", selectedFile);
   }
+
+  const customCodeVal = document.getElementById("customCode").value;
+  if (customCodeVal && customCodeVal.trim()) {
+    formData.append("custom_code", customCodeVal.trim());
+  }
+  if (selectedCodeFile) {
+    formData.append("code_file", selectedCodeFile);
+  }
+  selectedScreenshots.forEach(shot => {
+    formData.append("screenshots", shot);
+  });
 
   addLog("2. Отправка запроса к Gemini API (анализ, синтез кода и ГОСТ-структуры)...");
 

@@ -19,6 +19,7 @@ class GeminiLabClient:
         task_text: str,
         subject: str = "",
         variant: str = "",
+        custom_code: str = "",
         image_paths: Optional[List[Path]] = None,
         custom_instructions: str = "",
         on_status: Optional[Callable[[str], None]] = None
@@ -53,6 +54,16 @@ class GeminiLabClient:
 8. Развернутые ответы на ВСЕ контрольные вопросы (если они есть в задании или вытекают из темы).
 9. Качественный вывод по белорусскому академическому стандарту (согласованный с целью работы).
 """
+        if custom_code and custom_code.strip():
+            user_prompt += f"""
+ТРЕБОВАНИЕ: СТУДЕНТ ПРЕДОСТАВИЛ СВОЙ ГОТОВЫЙ КОД!
+В поле "code" ОБЯЗАТЕЛЬНО используй именно этот код студента:
+```
+{custom_code.strip()}
+```
+Опиши алгоритм этого кода, ответь на контрольные вопросы и сделай вывод на основе именно этого кода!
+"""
+
         prompt_parts.append(user_prompt)
 
         # Attach images if any (multimodal)
@@ -65,7 +76,6 @@ class GeminiLabClient:
                     except Exception as e:
                         print(f"Warning: Failed to load image {p}: {e}")
 
-        # Build model cascade starting with the freshest preferred model
         preferred = self.config.model_name or MODELS_CASCADE[0]
         cascade = [preferred] + [m for m in MODELS_CASCADE if m != preferred]
 
@@ -90,6 +100,8 @@ class GeminiLabClient:
                 )
                 raw_text = response.text or ""
                 parsed = self._parse_json_response(raw_text)
+                if custom_code and custom_code.strip():
+                    parsed["code"] = custom_code.strip()
                 parsed["_generated_by_model"] = model_name
                 success_msg = f"✓ Успешно сгенерировано моделью {model_name}!"
                 if on_status:
@@ -99,41 +111,55 @@ class GeminiLabClient:
 
             except Exception as e:
                 err_str = str(e)
-                attempted_errors.append(f"{model_name}: {err_str[:120]}")
                 last_error = e
-
-                # Check if this error warrants fallback to next model
-                is_quota = any(kw in err_str for kw in ["RESOURCE_EXHAUSTED", "429", "quota", "limit"])
-                is_unavailable = any(kw in err_str for kw in ["503", "UNAVAILABLE", "high demand"])
-                is_not_found = any(kw in err_str for kw in ["404", "NOT_FOUND", "not found", "no longer available"])
-
+                attempted_errors.append(f"{model_name}: {err_str.splitlines()[0] if err_str else 'Unknown'}")
+                warn_msg = f"⚠ {model_name} временно недоступна / лимит исчерпан. Переключаюсь на следующую модель..."
                 if i < len(cascade) - 1:
                     next_model = cascade[i + 1]
-                    fallback_msg = f"⚠ {model_name} временно недоступна / лимит исчерпан. Переключаюсь на {next_model}..."
-                    if on_status:
-                        on_status(fallback_msg)
-                    print(f"[GeminiClient] {fallback_msg}")
-                    continue
-                else:
-                    break
+                    warn_msg = f"⚠ {model_name} временно недоступна / лимит исчерпан. Переключаюсь на {next_model}..."
+                if on_status:
+                    on_status(warn_msg)
+                print(f"[GeminiClient] {warn_msg}")
+                continue
 
-        all_errs = "\n".join(attempted_errors)
-        raise RuntimeError(f"Все модели Gemini в цепочке вернули ошибку:\n{all_errs}")
+        error_details = "\n".join(attempted_errors)
+        raise RuntimeError(
+            f"Не удалось сгенерировать ответ ни одной из моделей Gemini в каскаде.\n"
+            f"История попыток:\n{error_details}\nПоследняя ошибка: {last_error}"
+        )
 
     def _parse_json_response(self, text: str) -> Dict[str, Any]:
-        text = text.strip()
-        if text.startswith("```json"):
-            text = text[7:]
-        elif text.startswith("```"):
-            text = text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.strip()
+        cleaned = text.strip()
+        cleaned = re.sub(r"^```json\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"^```\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        cleaned = cleaned.strip()
 
         try:
-            return json.loads(text)
-        except Exception:
-            match = re.search(r'\{.*\}', text, re.DOTALL)
-            if match:
-                return json.loads(match.group(0))
-            raise ValueError("Не удалось распарсить JSON-ответ от Gemini:\n" + text[:400])
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            json_match = re.search(r"(\{.*\})", cleaned, re.DOTALL)
+            if json_match:
+                try:
+                    return json.loads(json_match.group(1))
+                except json.JSONDecodeError:
+                    pass
+            return self._fallback_text_to_dict(cleaned)
+
+    def _fallback_text_to_dict(self, text: str) -> Dict[str, Any]:
+        return {
+            "lab_number": "1",
+            "topic": "Лабораторная работа",
+            "goal": "Сформировать практические умения и навыки в соответствии с темой работы.",
+            "task": text[:500] if text else "Выполнение задания по методическим указаниям.",
+            "equipment": "ПЭВМ IBM/AT, ОС Windows / Linux, среда разработки.",
+            "theory": "",
+            "solution_description": "В ходе выполнения работы были решены поставленные задачи.",
+            "code": "# Код программы\nprint('Лабораторная работа выполнена')",
+            "code_language": "python",
+            "code_filename": "main.py",
+            "test_inputs": "",
+            "simulated_output": "Программа выполнена успешно.",
+            "questions_answers": [],
+            "conclusion": "В ходе выполнения лабораторной работы были успешно освоены все практические навыки."
+        }

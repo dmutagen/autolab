@@ -85,6 +85,32 @@
             <textarea id="taskText" class="form-textarea" placeholder="Вставьте формулировку задания, тему лабораторной, фрагмент методички или вопросы..."></textarea>
           </div>
 
+          <!-- Custom Code Input -->
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label class="form-label" for="customCode" style="margin-bottom: 0;">Свой готовый код программы (необязательно)</label>
+              <button type="button" class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;" onclick="document.getElementById('codeFileInput').click()">📁 Загрузить файл с кодом</button>
+              <input type="file" id="codeFileInput" style="display: none;" accept=".java,.py,.kt,.cpp,.c,.cs,.sql,.js,.ts,.sh" onchange="handleCodeFileSelect(event)">
+            </div>
+            <div id="codeFileSelected" style="display: none; font-size: 12px; color: #38bdf8; margin-bottom: 6px;"></div>
+            <textarea id="customCode" class="form-textarea" style="font-family: monospace; font-size: 12px; min-height: 80px;" placeholder="Вставьте сюда код из Android Studio / VS Code / IDEA, если программа уже написана..."></textarea>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">ИИ вставит именно ваш код в отчет, описав ход работы и выводы на его основе.</div>
+          </div>
+
+          <!-- Custom Screenshots Upload -->
+          <div class="form-group">
+            <label class="form-label">Свои скриншоты программы (необязательно)</label>
+            <div class="dropzone" id="screenshotDropzone" onclick="document.getElementById('screenshotInput').click()" style="padding: 16px;">
+              <div class="dropzone-icon" style="font-size: 22px; margin-bottom: 4px;">🖼️</div>
+              <div class="dropzone-text" id="screenshotDropzoneText" style="font-size: 13px;">
+                Нажмите или перетащите <strong>один или несколько скриншотов</strong> (PNG, JPG)
+              </div>
+              <div id="screenshotPreviews" style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;"></div>
+            </div>
+            <input type="file" id="screenshotInput" style="display: none;" accept=".png,.jpg,.jpeg,.webp" multiple onchange="handleScreenshotsSelect(event)">
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Если загрузите свои снимки, ИИ использует их и не будет создавать синтетические макеты.</div>
+          </div>
+
           <!-- Options -->
           <div class="checkbox-group" style="margin-bottom: 8px;">
             <input type="checkbox" id="theoryCheckbox">
