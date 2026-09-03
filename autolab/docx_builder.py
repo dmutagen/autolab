@@ -32,6 +32,7 @@ def normalize_paragraphs(text: str) -> List[str]:
     """
     Split text into coherent paragraphs and list items, un-wrapping artificial
     line breaks so that Word JUSTIFY does not stretch words across the entire page.
+    Replaces all list bullets (*, •, -, +) with middle en-dashes (–).
     """
     if not text:
         return []
@@ -47,8 +48,11 @@ def normalize_paragraphs(text: str) -> List[str]:
 
         current = []
         for line in lines:
-            # Check if line starts a list item: '1. ', '- ', '• '
-            is_list_item = bool(re.match(r'^(?:\d+[\.\)]|[-•*])\s+', line))
+            # Replace bullet markers (*, •, +, -) with middle en-dash (–)
+            line = re.sub(r'^[ \t]*[\*•\-\+][ \t]+', '– ', line)
+
+            # Check if line starts a list item: '1. ', '1) ', '– '
+            is_list_item = bool(re.match(r'^(?:\d+[\.\)]|–)\s+', line))
             if is_list_item:
                 if current:
                     paragraphs.append(" ".join(current))
@@ -215,7 +219,6 @@ class DocxBuilder:
     def add_code_block(self, code: str):
         self._add_paragraph("Код программы:")
         clean_code = code.strip()
-        # Remove any markdown code fences if AI returned them
         clean_code = re.sub(r'^```[a-zA-Z]*\n', '', clean_code)
         clean_code = re.sub(r'\n```$', '', clean_code)
         
@@ -302,16 +305,17 @@ class DocxBuilder:
         # Section: Результаты выполнения работы
         self._add_paragraph("Результаты выполнения работы:")
 
+        # If theory checkbox is OFF -> NO explanatory text, NO steps, ONLY CODE!
         if include_theory:
             theory = data.get("theory", "").strip()
             if theory:
                 self._add_text_block(theory)
 
-        sol_desc = data.get("solution_description", "").strip()
-        if sol_desc:
-            self._add_text_block(sol_desc)
+            sol_desc = data.get("solution_description", "").strip()
+            if sol_desc:
+                self._add_text_block(sol_desc)
 
-        # Code block
+        # Code block (immediately follows if include_theory is False!)
         code = data.get("code", "").strip()
         if code:
             self.add_code_block(code)
