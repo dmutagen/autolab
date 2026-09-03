@@ -1,0 +1,25 @@
+{
+  "gemini_api_key": "YOUR_GEMINI_API_KEY_HERE",
+  "model_name": "gemini-2.5-flash",
+  "student": {
+    "institution": "Учреждение образования «Гомельский государственный машиностроительный колледж»",
+    "specialty": "5-04-0611-01 «Программирование мобильных устройств»",
+    "group": "ПМ-31",
+    "student_name": "Иванов И.И.",
+    "teacher_name": "Преподаватель П.П.",
+    "city": "Гомель",
+    "year": "2026"
+  },
+  "gost": {
+    "font_name": "Times New Roman",
+    "font_size_pt": 14,
+    "line_spacing": 1.0,
+    "first_line_indent_cm": 1.25,
+    "margin_left_mm": 30,
+    "margin_right_mm": 10,
+    "margin_top_mm": 20,
+    "margin_bottom_mm": 20,
+    "code_font_name": "Times New Roman",
+    "code_font_size_pt": 11
+  }
+}

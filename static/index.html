@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AutoLab AI — Автоматизация лабораторных работ (Белорусский ГОСТ)</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="logo-area">
+        <div class="logo-badge">AL</div>
+        <div class="header-title">
+          <h1>AutoLab AI (Беларусь)</h1>
+          <p>Генератор лабораторных и практических работ по ГОСТ 7.32 / СТБ 2154</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div id="statusBadge" class="status-badge warning">
+          <span class="dot"></span>
+          <span id="statusText">Проверка API...</span>
+        </div>
+        <button class="btn btn-secondary" onclick="openSettings()">
+          ⚙ Настройки и Профиль
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Grid -->
+    <main class="main-grid">
+      <!-- Left Column: Input Form -->
+      <section class="card">
+        <h2 class="card-title">📝 Исходные данные задания</h2>
+        
+        <form id="labForm" onsubmit="generateLab(event)">
+          <!-- Subject, Variant & Date -->
+          <div class="form-row" style="grid-template-columns: 2fr 0.8fr 1.2fr;">
+            <div class="form-group">
+              <label class="form-label" for="subjectInput">Учебный предмет</label>
+              <input type="text" id="subjectInput" class="form-input" placeholder="например: Разработка мобильных приложений" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="variantInput">Вариант</label>
+              <input type="text" id="variantInput" class="form-input" placeholder="18">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="dateInput">Дата работы</label>
+              <input type="date" id="dateInput" class="form-input">
+            </div>
+          </div>
+          <div class="quick-pills" style="margin-top: -10px; margin-bottom: 14px;">
+            <span class="pill" onclick="setSubject('Разработка приложений для мобильных устройств')">Мобилки</span>
+            <span class="pill" onclick="setSubject('Разработка и сопровождение ПО')">Разработка ПО</span>
+            <span class="pill" onclick="setSubject('Базы данных и СУБД')">СУБД</span>
+            <span class="pill" onclick="setSubject('Информационная безопасность')">ИБ</span>
+            <span class="pill" onclick="setSubject('Технология разработки ПО (ТРПО)')">ТРПО</span>
+            <span class="pill" onclick="setSubject('Схемотехника и микроконтроллеры')">Схемотехника</span>
+          </div>
+
+          <!-- Custom Filename -->
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label class="form-label" for="filenameInput">Имя файла отчета</label>
+            <input type="text" id="filenameInput" class="form-input" placeholder="Авто (например: МОБ_35 или разраб2)">
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Оставьте пустым для автогенерации по предмету и номеру работы</div>
+          </div>
+
+          <!-- File Upload Dropzone -->
+          <div class="form-group">
+            <label class="form-label">Файл методички, фото задания или готовый скриншот программы (PDF, DOCX, PNG, JPG)</label>
+            <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+              <div class="dropzone-icon">📄</div>
+              <div class="dropzone-text" id="dropzoneText">
+                Перетащите методичку сюда или <strong>нажмите для выбора</strong>
+              </div>
+              <div class="file-selected" id="fileSelected" style="display: none;"></div>
+            </div>
+            <input type="file" id="fileInput" style="display: none;" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.webp" onchange="handleFileSelect(event)">
+          </div>
+
+          <!-- Task Description -->
+          <div class="form-group">
+            <label class="form-label" for="taskText">Текст задания / тема / контрольные вопросы</label>
+            <textarea id="taskText" class="form-textarea" placeholder="Вставьте формулировку задания, тему лабораторной, фрагмент методички или вопросы..."></textarea>
+          </div>
+
+          <!-- Options -->
+          <div class="checkbox-group" style="margin-bottom: 8px;">
+            <input type="checkbox" id="theoryCheckbox">
+            <label for="theoryCheckbox">Добавить теоретические сведения (по умолчанию выключено, сразу ход работы)</label>
+          </div>
+          <div class="checkbox-group">
+            <input type="checkbox" id="titlePageCheckbox">
+            <label for="titlePageCheckbox">Сформировать титульный лист (для практик / курсовых / полных отчетов)</label>
+          </div>
+
+          <button type="submit" id="submitBtn" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 14px;">
+            🚀 Сгенерировать работу по ГОСТу
+          </button>
+        </form>
+
+        <!-- Progress Box -->
+        <div class="progress-box" id="progressBox">
+          <div class="progress-header">
+            <div class="spinner"></div>
+            <span>ИИ выполняет лабораторную работу...</span>
+          </div>
+          <ul class="log-list" id="logList"></ul>
+        </div>
+      </section>
+
+      <!-- Right Column: Results -->
+      <section class="card">
+        <h2 class="card-title">📊 Результат работы</h2>
+
+        <div id="resultPlaceholder" class="result-placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+          </svg>
+          <p>Заполните форму слева и нажмите «Сгенерировать работу»</p>
+          <p style="font-size: 12px; margin-top: 6px;">ИИ создаст код, выполнит его, сделает скриншот и сверстает отчет по ГОСТу.</p>
+        </div>
+
+        <div id="resultContent" class="result-content">
+          <!-- Download Buttons -->
+          <div class="result-actions">
+            <a id="downloadBtn" href="#" class="btn btn-success" style="flex: 1; justify-content: center;" download>
+              📥 Скачать .DOCX (Белорусский ГОСТ)
+            </a>
+          </div>
+
+          <!-- Preview Tabs -->
+          <div class="preview-tabs">
+            <button class="tab-btn active" onclick="switchTab('tabScreenshot')">Снимок экрана</button>
+            <button class="tab-btn" onclick="switchTab('tabCode')">Код программы</button>
+            <button class="tab-btn" onclick="switchTab('tabReport')">Содержание отчета</button>
+          </div>
+
+          <!-- Tab: Screenshot -->
+          <div id="tabScreenshot" class="tab-panel active">
+            <div class="screenshot-preview">
+              <img id="previewImage" src="" alt="Скриншот терминала">
+              <div class="screenshot-caption" id="previewCaption">Рисунок 1 – Результат выполнения программы в консоли</div>
+            </div>
+          </div>
+
+          <!-- Tab: Code -->
+          <div id="tabCode" class="tab-panel">
+            <div class="code-box">
+              <button class="copy-btn" onclick="copyCode()">Копировать</button>
+              <pre><code id="previewCode"></code></pre>
+            </div>
+          </div>
+
+          <!-- Tab: Report -->
+          <div id="tabReport" class="tab-panel">
+            <div style="font-size: 14px; display: flex; flex-direction: column; gap: 10px;">
+              <div><strong>Тема:</strong> <span id="repTopic"></span></div>
+              <div><strong>Цель работы:</strong> <span id="repGoal"></span></div>
+              <div><strong>Оснащение:</strong> <span id="repEquip"></span></div>
+              <div style="margin-top: 10px;"><strong>Ответы на вопросы:</strong>
+                <div id="repQuestions" style="margin-top: 6px; padding-left: 12px; color: var(--text-muted);"></div>
+              </div>
+              <div style="margin-top: 10px; background: #0b1120; padding: 12px; border-radius: 8px; border-left: 4px solid var(--accent);">
+                <strong>Вывод:</strong> <span id="repConclusion"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- History Section -->
+    <section class="card" style="margin-top: 24px;">
+      <h3 class="card-title">🕒 Недавно сгенерированные работы</h3>
+      <div id="historyList" style="display: flex; flex-wrap: wrap; gap: 10px;">
+        <span style="color: var(--text-muted); font-size: 13px;">Загрузка истории...</span>
+      </div>
+    </section>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 style="font-size: 18px; font-weight: 700;">⚙ Настройки профиля и Gemini API</h3>
+        <button class="close-btn" onclick="closeSettings()">&times;</button>
+      </div>
+
+      <form id="settingsForm" onsubmit="saveSettings(event)">
+        <!-- Gemini Key -->
+        <div class="form-group">
+          <label class="form-label" for="cfgApiKey">
+            Бесплатный Gemini API Key 
+            <a href="https://aistudio.google.com/apikey" target="_blank" style="color: var(--accent); margin-left: 6px; text-decoration: none;">(Получить бесплатно за 30 сек ↗)</a>
+          </label>
+          <input type="password" id="cfgApiKey" class="form-input" placeholder="AIzaSy...">
+          <small style="color: var(--text-muted); font-size: 11px; margin-top: 4px; display: block;">
+            Если ключ не задан, доступен демонстрационный режим.
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="cfgModel">Модель Gemini</label>
+          <select id="cfgModel" class="form-select">
+            <option value="gemini-3.8-flash">gemini-3.8-flash (Самая свежая версия, активна по умолчанию)</option>
+            <option value="gemini-3.7-flash">gemini-3.7-flash</option>
+            <option value="gemini-3.6-flash">gemini-3.6-flash</option>
+            <option value="gemini-3.5-flash">gemini-3.5-flash</option>
+            <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+          </select>
+          <small style="color: var(--accent); font-size: 11px; margin-top: 4px; display: block;">
+            ⚡ Авто-каскад активен: при исчерпании лимитов или перегрузке (429/503) система сама переключается на предыдущие версии!
+          </small>
+        </div>
+
+        <hr style="border-color: var(--border); margin: 20px 0;">
+        <h4 style="font-size: 14px; font-weight: 700; margin-bottom: 12px; color: var(--accent);">Данные студента (по ГОСТу)</h4>
+
+        <div class="form-group">
+          <label class="form-label" for="cfgFio">Фамилия, инициалы обучающегося</label>
+          <input type="text" id="cfgFio" class="form-input" placeholder="Кашевич Е.Н.">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="cfgGroup">Группа</label>
+            <input type="text" id="cfgGroup" class="form-input" placeholder="ПМ-31">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cfgTeacher">Преподаватель</label>
+            <input type="text" id="cfgTeacher" class="form-input" placeholder="Леонова К.А.">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="cfgInst">Учреждение образования</label>
+          <input type="text" id="cfgInst" class="form-input" placeholder="УО «Гомельский государственный машиностроительный колледж»">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="cfgSpec">Специальность</label>
+          <input type="text" id="cfgSpec" class="form-input" placeholder="5-04-0611-01 «Программирование мобильных устройств»">
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 24px;">
+          <button type="submit" class="btn btn-primary" style="flex: 1; justify-content: center;">Сохранить настройки</button>
+          <button type="button" class="btn btn-secondary" onclick="closeSettings()">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
