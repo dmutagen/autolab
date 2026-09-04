@@ -28,11 +28,71 @@ def clean_markdown(text: str) -> str:
     text = re.sub(r'^\s*#{1,6}\s+', '', text, flags=re.MULTILINE)
     return text.strip()
 
+def lowercase_first_russian(word: str) -> str:
+    """Lowercase first Cyrillic letter unless it is an all-caps acronym (ПЭВМ, ОС, СУБД, API, etc.)."""
+    if not word:
+        return ""
+    if word.isupper() and len(word) >= 2:
+        return word
+    if word[0] in 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ':
+        if len(word) == 1:
+            return word.lower()
+        if word[1].isupper():
+            return word
+        return word[0].lower() + word[1:]
+    return word
+
+def fix_colons_and_bullets(text: str) -> str:
+    """
+    Lowercase the first Russian word after colons (: or : - or : –) and list dashes (– ),
+    as required by GOST and Russian typography (e.g. '4. Перезапуск Activity: для того чтобы...').
+    Also normalizes spaces so there is exactly one space after ':' and '–'.
+    """
+    if not text:
+        return ""
+
+    # Normalize multiple spaces after bullet dash or numbers
+    text = re.sub(r'(^[ \t]*[–—\-])[ \t]+', r'– ', text, flags=re.MULTILINE)
+    text = re.sub(r'(^\d+[\.\)])[ \t]+', r'\1 ', text, flags=re.MULTILINE)
+
+    # Normalize multiple spaces after colon
+    text = re.sub(r':\s+', ': ', text)
+
+    def repl_colon(m):
+        prefix = m.group(1) # e.g. ': ', ': - ', ': – '
+        word = m.group(2)
+        return prefix + lowercase_first_russian(word)
+
+    text = re.sub(r'(:[ \t]*(?:[–—\-][ \t]*)?)([A-Za-zА-Яа-яЁё]+)', repl_colon, text)
+
+    def repl_bullet(m):
+        prefix = m.group(1) # '– '
+        word = m.group(2)
+        return prefix + lowercase_first_russian(word)
+
+    text = re.sub(r'(^[ \t]*[–—\-][ \t]+)([A-Za-zА-Яа-яЁё]+)', repl_bullet, text, flags=re.MULTILINE)
+    return text
+
+def sanitize_caption(caption: str) -> str:
+    """
+    Strip any existing 'Рисунок X – ', 'Рис. X: ', etc., to prevent duplicate
+    'Рисунок 1 – Рисунок 1 – ...' captions.
+    """
+    if not caption:
+        return "Результат выполнения работы"
+    cap = clean_markdown(normalize_dashes(caption.strip(". ")))
+    pattern = r'^(?:(?:рисунок|рис|иллюстрация|скриншот)\s*\d*[\s–—\-\.\:]*)+'
+    while re.search(pattern, cap, flags=re.IGNORECASE):
+        cap = re.sub(pattern, '', cap, flags=re.IGNORECASE).strip()
+    cap = cap.lstrip("–—-:. ").strip()
+    return cap if cap else "Результат выполнения работы"
+
 def normalize_paragraphs(text: str) -> List[str]:
     """
     Split text into coherent paragraphs and list items, un-wrapping artificial
     line breaks so that Word JUSTIFY does not stretch words across the entire page.
     Replaces all list bullets (*, •, -, +) with middle en-dashes (–).
+    Enforces lowercase after colons and list bullets.
     """
     if not text:
         return []
@@ -48,8 +108,12 @@ def normalize_paragraphs(text: str) -> List[str]:
 
         current = []
         for line in lines:
-            # Replace bullet markers (*, •, +, -) with middle en-dash (–)
-            line = re.sub(r'^[ \t]*[\*•\-\+][ \t]+', '– ', line)
+            # Replace bullet markers (*, •, +, -, –, —) with middle en-dash (–)
+            line = re.sub(r'^[ \t]*[\*•\-\–—\+][ \t]+', '– ', line)
+            # Normalize spaces after numbers '1.  ' -> '1. '
+            line = re.sub(r'^(\d+[\.\)])\s+', r'\1 ', line)
+            # Enforce lowercase after colons and bullets
+            line = fix_colons_and_bullets(line)
 
             # Check if line starts a list item: '1. ', '1) ', '– '
             is_list_item = bool(re.match(r'^(?:\d+[\.\)]|–)\s+', line))
@@ -154,6 +218,14 @@ class DocxBuilder:
 
         if text:
             clean_text = clean_markdown(normalize_dashes(text))
+            # Protect official metadata lines from being lowercased
+            is_metadata = any(clean_text.startswith(prefix) for prefix in [
+                "Номер учебной группы:", "Фамилия, инициалы", "Дата выполнения", "Тема работы:",
+                "Оснащение работы:", "Вариант:", "Выполнил:", "Принял:", "Вывод:", "Рисунок"
+            ])
+            if not is_metadata:
+                clean_text = fix_colons_and_bullets(clean_text)
+
             run = p.add_run(clean_text)
             run.font.name = 'Times New Roman'
             run.font.size = Pt(font_size_pt or 14)
@@ -202,10 +274,12 @@ class DocxBuilder:
         self._add_paragraph(f"Тема работы: «{topic}»")
 
         goal = clean_markdown(data.get("goal", "").strip())
+        goal = re.sub(r'^\s*цель(?:\s+работы)?\s*:\s*', '', goal, flags=re.IGNORECASE)
         if goal:
             self._add_text_block(goal, prefix="Цель работы: ")
 
         task = clean_markdown(data.get("task", "").strip())
+        task = re.sub(r'^\s*задание\s*:\s*', '', task, flags=re.IGNORECASE)
         if task:
             self._add_text_block(task, prefix="Задание: ")
 
@@ -215,6 +289,7 @@ class DocxBuilder:
             self._add_paragraph(f"Вариант: {clean_var}")
 
         equip = clean_markdown(data.get("equipment", "").strip())
+        equip = re.sub(r'^\s*оснащение(?:\s+работы)?\s*:\s*', '', equip, flags=re.IGNORECASE)
         if equip:
             self._add_text_block(equip, prefix="Оснащение работы: ")
 
@@ -251,7 +326,7 @@ class DocxBuilder:
         run_img = p_img.add_run()
         run_img.add_picture(str(image_path), width=Mm(160))
 
-        clean_cap = clean_markdown(normalize_dashes(caption.strip(". ")))
+        clean_cap = sanitize_caption(caption)
         self._add_paragraph(
             f"Рисунок {figure_number} – {clean_cap}",
             alignment=WD_ALIGN_PARAGRAPH.CENTER,
@@ -336,7 +411,7 @@ class DocxBuilder:
             if i < len(figures_meta) and "title" in figures_meta[i]:
                 cap = figures_meta[i]["title"]
             elif len(screenshots) > 1:
-                cap = f"Интерфейс программы (часть {i+1})"
+                cap = f"Интерфейс программы (часть {i+1})" if code else f"Макет интерфейса (экран {i+1})"
             self.add_screenshot(shot, fig_no, cap)
             fig_no += 1
 
