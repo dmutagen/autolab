@@ -117,8 +117,43 @@ class LabPipeline:
             screenshots_to_embed.append(dest_shot)
             log("4. Использован прикрепленный скриншот пользователя...")
         else:
-            log("4. Создание реалистичного снимка интерфейса программы...")
-            screen_path = job_output_dir / "program_screenshot.png"
+            figures_list = solution.get("figures", [])
+            if not isinstance(figures_list, list):
+                figures_list = []
+
+            # If Gemini didn't return multiple figures, detect if the task implies multiple steps/states
+            full_context = (task_text + " " + solution.get("task", "") + " " + solution.get("topic", "")).lower()
+            is_multi_state = any(w in full_context for w in [
+                "три", "3", "нескольк", "анимац", "перемещ", "вращ", "масштаб", "шаг", "экрана", "экранов", "состояни", "проверк"
+            ])
+            is_mobile_app = "мобил" in (subject or "").lower() or "android" in (subject or "").lower() or "androidx" in (code or "").lower()
+
+            if len(figures_list) < 2 and is_multi_state:
+                if is_mobile_app:
+                    figures_list = [
+                        {"title": "Главный экран приложения в исходном состоянии", "state": "initial"},
+                        {"title": "Результат выполнения анимации перемещения (Translate)", "state": "translate"},
+                        {"title": "Результат выполнения анимации вращения (Rotate)", "state": "rotate"},
+                        {"title": "Результат выполнения анимации масштабирования (Scale)", "state": "scale"}
+                    ]
+                elif not (code or "").strip():
+                    figures_list = [
+                        {"title": "Главный экран разработанного интерфейса", "state": "initial"},
+                        {"title": "Макет каталога и интерактивных компонентов", "state": "catalog"},
+                        {"title": "Адаптивная версия интерфейса для мобильных устройств", "state": "mobile"}
+                    ]
+                else:
+                    figures_list = [
+                        {"title": "Результат выполнения программы на основных тестовых данных", "state": "test1"},
+                        {"title": "Проверка работы программы на дополнительных тестах", "state": "test2"}
+                    ]
+            elif not figures_list:
+                def_title = "Макет разработанного интерфейса" if not (code or "").strip() else "Результат выполнения программы"
+                figures_list = [{"title": def_title, "state": "initial"}]
+
+            solution["figures"] = figures_list
+            log(f"4. Создание реалистичных снимков интерфейса ({len(figures_list)} шт.)...")
+
             cmd = f"python3 {code_filename}"
             if "java" in code_lang.lower():
                 cmd = f"javac {code_filename} && java Main"
@@ -129,15 +164,25 @@ class LabPipeline:
             elif "bash" in code_lang.lower():
                 cmd = "./script.sh"
 
-            self.screenshot_engine.render_smart_screenshot(
-                subject=solution.get("subject") or subject,
-                topic=solution.get("topic") or "",
-                code=code,
-                command=cmd,
-                output_text=output_text,
-                output_image_path=screen_path
-            )
-            screenshots_to_embed.append(screen_path)
+            for f_idx, fig in enumerate(figures_list[:4]):
+                screen_path = job_output_dir / f"program_screenshot_{f_idx+1}.png"
+                fig_title = fig.get("title", "")
+                fig_state = fig.get("state", "") or fig_title
+                fig_out = fig.get("simulated_output", "") or output_text
+                fig_cmd = fig.get("command", "") or cmd
+
+                self.screenshot_engine.render_smart_screenshot(
+                    subject=solution.get("subject") or subject,
+                    topic=solution.get("topic") or "",
+                    code=code,
+                    command=fig_cmd,
+                    output_text=fig_out,
+                    output_image_path=screen_path,
+                    state=fig_state,
+                    fig_title=fig_title,
+                    step_index=f_idx + 1
+                )
+                screenshots_to_embed.append(screen_path)
 
         # Step 5: Build DOCX
         log("5. Верстка документа DOCX по Белорусскому ГОСТу...")
@@ -171,6 +216,7 @@ class LabPipeline:
         log(f"6. Готово! Файл сохранен: {docx_path.name}")
 
         first_shot_url = f"/files/{job_id}/{screenshots_to_embed[0].name}" if screenshots_to_embed else ""
+        all_shot_urls = [f"/files/{job_id}/{s.name}" for s in screenshots_to_embed]
 
         return {
             "success": True,
@@ -180,6 +226,7 @@ class LabPipeline:
             "execution": exec_result,
             "output_text": output_text,
             "screenshot_url": first_shot_url,
+            "screenshot_urls": all_shot_urls,
             "screenshot_path": str(screenshots_to_embed[0]) if screenshots_to_embed else "",
             "docx_url": f"/files/{job_id}/{docx_filename}",
             "docx_path": str(docx_path),

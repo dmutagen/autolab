@@ -328,10 +328,32 @@ async function generateLab(e) {
     dlBtn.href = data.docx_url;
     dlBtn.innerText = `📥 Скачать ${data.docx_filename}`;
 
-    // Screenshot tab
-    document.getElementById("previewImage").src = data.screenshot_url;
-    const figTitle = data.solution.figures && data.solution.figures[0] ? data.solution.figures[0].title : "Результат выполнения программы в консоли";
-    document.getElementById("previewCaption").innerText = `Рисунок 1 – ${figTitle}`;
+    // Screenshot tab (multiple screenshots support)
+    const gallery = document.getElementById("screenshotsGallery");
+    const shotUrls = data.screenshot_urls || (data.screenshot_url ? [data.screenshot_url] : []);
+    const figures = (data.solution && data.solution.figures) ? data.solution.figures : [];
+
+    if (gallery) {
+      if (shotUrls.length > 0) {
+        gallery.innerHTML = shotUrls.map((url, idx) => {
+          let figTitle = (figures[idx] && figures[idx].title) ? figures[idx].title : "Результат выполнения программы";
+          figTitle = figTitle.replace(/^(?:рисунок|рис|иллюстрация)\s*\d*[\s–—\-\.\:]*/i, "").trim();
+          return `
+            <div class="screenshot-preview" style="margin-bottom: 14px;">
+              <img src="${url}" alt="Скриншот ${idx + 1}">
+              <div class="screenshot-caption">Рисунок ${idx + 1} – ${figTitle}</div>
+            </div>
+          `;
+        }).join("");
+      } else {
+        gallery.innerHTML = `
+          <div class="screenshot-preview">
+            <img id="previewImage" src="${data.screenshot_url || ''}" alt="Скриншот">
+            <div class="screenshot-caption" id="previewCaption">Рисунок 1 – Результат выполнения программы</div>
+          </div>
+        `;
+      }
+    }
 
     // Code tab
     document.getElementById("previewCode").innerText = data.solution.code || "";
