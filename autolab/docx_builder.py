@@ -1,6 +1,9 @@
 import docx
 from docx.shared import Mm, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -334,6 +337,85 @@ class DocxBuilder:
             font_size_pt=14
         )
 
+    def _remove_table_borders(self, table):
+        tblPr = table._tbl.tblPr
+        tblBorders = OxmlElement('w:tblBorders')
+        for border_name in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
+            border = OxmlElement(f'w:{border_name}')
+            border.set(qn('w:val'), 'none')
+            tblBorders.append(border)
+        tblPr.append(tblBorders)
+
+    def _set_cell_padding(self, cell, top=0, bottom=40, left=15, right=15):
+        tcPr = cell._tc.get_or_add_tcPr()
+        tcMar = OxmlElement('w:tcMar')
+        for m, val in [('top', top), ('bottom', bottom), ('left', left), ('right', right)]:
+            node = OxmlElement(f'w:{m}')
+            node.set(qn('w:w'), str(val))
+            node.set(qn('w:type'), 'dxa')
+            tcMar.append(node)
+        tcPr.append(tcMar)
+
+    def add_screenshots_side_by_side(self, screenshots: List[Path], start_fig_no: int, captions: List[str]):
+        """
+        Embeds multiple screenshots horizontally on the same line in a single borderless table.
+        Each column has an image and its corresponding caption 'Рисунок X – <caption_i>'.
+        """
+        valid_pairs = []
+        for i, s in enumerate(screenshots):
+            if s.exists():
+                cap = captions[i] if i < len(captions) else "Результат выполнения программы"
+                valid_pairs.append((s, sanitize_caption(cap), start_fig_no + i))
+
+        n = len(valid_pairs)
+        if n == 0:
+            return
+        if n == 1:
+            s, cap, f_no = valid_pairs[0]
+            self.add_screenshot(s, f_no, cap)
+            return
+
+        table = self.doc.add_table(rows=2, cols=n)
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        self._remove_table_borders(table)
+
+        col_w_mm = 168.0 / n
+        img_w_mm = max(col_w_mm - 2, 15.0)
+
+        for i, (shot_path, cap_text, fig_num) in enumerate(valid_pairs):
+            for row in table.rows:
+                row.cells[i].width = Mm(col_w_mm)
+                self._set_cell_padding(row.cells[i], top=0, bottom=40, left=15, right=15)
+
+            # Row 0: Image
+            c_img = table.cell(0, i)
+            p_img = c_img.paragraphs[0]
+            p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p_img.paragraph_format.line_spacing = 1.0
+            p_img.paragraph_format.space_before = Pt(0)
+            p_img.paragraph_format.space_after = Pt(0)
+            p_img.paragraph_format.first_line_indent = Mm(0)
+            r_img = p_img.add_run()
+            r_img.add_picture(str(shot_path), width=Mm(img_w_mm))
+
+            # Row 1: Caption
+            c_cap = table.cell(1, i)
+            p_cap = c_cap.paragraphs[0]
+            p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p_cap.paragraph_format.line_spacing = 1.0
+            p_cap.paragraph_format.space_before = Pt(4)
+            p_cap.paragraph_format.space_after = Pt(0)
+            p_cap.paragraph_format.first_line_indent = Mm(0)
+            r_cap = p_cap.add_run(f"Рисунок {fig_num} – {cap_text}")
+            r_cap.font.name = "Times New Roman"
+            r_cap.font.size = Pt(12 if n >= 4 else (13 if n == 3 else 14))
+
+        p_after = self.doc.add_paragraph()
+        p_after.paragraph_format.space_before = Pt(0)
+        p_after.paragraph_format.space_after = Pt(6)
+        p_after.paragraph_format.line_spacing = 1.0
+        p_after.paragraph_format.first_line_indent = Mm(0)
+
     def add_title_page(self, data: Dict[str, Any]):
         student = self.config.student
         
@@ -372,7 +454,9 @@ class DocxBuilder:
         screenshots: List[Path],
         with_title_page: bool = False,
         include_theory: bool = False,
-        user_variant: str = ""
+        user_variant: str = "",
+        photos_layout: str = "side_by_side",
+        include_screenshot_intro: bool = True
     ) -> Path:
         if with_title_page:
             self.add_title_page(data)
@@ -403,17 +487,37 @@ class DocxBuilder:
             if sol_desc:
                 self._add_text_block(sol_desc)
 
-        # Screenshots (can be multiple)
-        fig_no = 1
-        figures_meta = data.get("figures", [])
-        for i, shot in enumerate(screenshots):
-            cap = "Макет разработанного интерфейса" if not code else "Результат выполнения программы"
-            if i < len(figures_meta) and "title" in figures_meta[i]:
-                cap = figures_meta[i]["title"]
-            elif len(screenshots) > 1:
-                cap = f"Интерфейс программы (часть {i+1})" if code else f"Макет интерфейса (экран {i+1})"
-            self.add_screenshot(shot, fig_no, cap)
-            fig_no += 1
+        # Screenshots (can be multiple, side-by-side or separate)
+        if screenshots:
+            if include_screenshot_intro:
+                n_shots = len(screenshots)
+                if n_shots == 1:
+                    intro_text = "Внешний вид разработанного интерфейса и результат работы программы представлены на рисунке 1:"
+                else:
+                    intro_text = f"Внешний вид разработанного интерфейса и результаты выполнения работы представлены на рисунках 1–{n_shots}:"
+                self._add_paragraph(intro_text)
+
+            figures_meta = data.get("figures", [])
+            if photos_layout == "side_by_side" and len(screenshots) > 1:
+                caps = []
+                for i in range(len(screenshots)):
+                    c = "Результат выполнения программы" if code else "Макет разработанного интерфейса"
+                    if i < len(figures_meta) and "title" in figures_meta[i]:
+                        c = figures_meta[i]["title"]
+                    elif len(screenshots) > 1:
+                        c = f"Окно программы (часть {i+1})" if code else f"Экран интерфейса ({i+1})"
+                    caps.append(c)
+                self.add_screenshots_side_by_side(screenshots, 1, caps)
+            else:
+                fig_no = 1
+                for i, shot in enumerate(screenshots):
+                    cap = "Макет разработанного интерфейса" if not code else "Результат выполнения программы"
+                    if i < len(figures_meta) and "title" in figures_meta[i]:
+                        cap = figures_meta[i]["title"]
+                    elif len(screenshots) > 1:
+                        cap = f"Интерфейс программы (часть {i+1})" if code else f"Макет интерфейса (экран {i+1})"
+                    self.add_screenshot(shot, fig_no, cap)
+                    fig_no += 1
 
         # Control Questions
         qa_list = data.get("questions_answers", [])

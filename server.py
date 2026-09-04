@@ -81,6 +81,8 @@ async def generate_lab(
     include_theory: bool = Form(False),
     with_title_page: bool = Form(False),
     custom_instructions: str = Form(""),
+    photos_layout: str = Form("side_by_side"),
+    include_screenshot_intro: bool = Form(True),
     file: Optional[UploadFile] = File(None),
     files: List[UploadFile] = File(None),
     code_file: Optional[UploadFile] = File(None),
@@ -144,7 +146,9 @@ async def generate_lab(
             uploaded_files=uploaded_task_files if uploaded_task_files else None,
             user_screenshots=user_screenshot_paths if user_screenshot_paths else None,
             with_title_page=with_title_page,
-            custom_instructions=custom_instructions
+            custom_instructions=custom_instructions,
+            photos_layout=photos_layout,
+            include_screenshot_intro=include_screenshot_intro
         )
         return result
 

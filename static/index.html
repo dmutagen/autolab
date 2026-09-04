@@ -132,9 +132,24 @@
             <input type="checkbox" id="theoryCheckbox">
             <label for="theoryCheckbox">Добавить теоретические сведения (по умолчанию выключено, сразу ход работы)</label>
           </div>
-          <div class="checkbox-group">
+          <div class="checkbox-group" style="margin-bottom: 8px;">
             <input type="checkbox" id="titlePageCheckbox">
             <label for="titlePageCheckbox">Сформировать титульный лист (для практик / курсовых / полных отчетов)</label>
+          </div>
+
+          <!-- Screenshots Layout & Description Settings -->
+          <div class="form-row" style="grid-template-columns: 1.4fr 1.1fr; margin-top: 12px; margin-bottom: 14px; align-items: center; background: rgba(30, 41, 59, 0.4); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border);">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="photosLayoutSelect" style="font-size: 12px; margin-bottom: 4px;">Расположение скриншотов:</label>
+              <select id="photosLayoutSelect" class="form-select" style="padding: 6px 10px; font-size: 13px;">
+                <option value="side_by_side" selected>🖼️ Рядом в 1 строчку (вместе)</option>
+                <option value="separate">📄 Раздельно друг под другом</option>
+              </select>
+            </div>
+            <div class="checkbox-group" style="margin-bottom: 0; padding-top: 16px;">
+              <input type="checkbox" id="screenshotIntroCheckbox" checked>
+              <label for="screenshotIntroCheckbox" style="font-size: 13px;">Описание над фото</label>
+            </div>
           </div>
 
           <button type="submit" id="submitBtn" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 14px;">

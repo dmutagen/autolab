@@ -14,10 +14,15 @@ class ScreenshotEngine:
             "/usr/share/fonts/liberation/LiberationMono-Regular.ttf"
         ])
         self.font_sans_path = self._find_font([
-            "/usr/share/fonts/noto/NotoSans-Regular.ttf",
             "/usr/share/fonts/TTF/DejaVuSans.ttf",
+            "/usr/share/fonts/noto/NotoSans-Regular.ttf",
             "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
             "/usr/share/fonts/TTF/JetBrainsMonoNL-Medium.ttf"
+        ])
+        self.font_bold_path = self._find_font([
+            "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/noto/NotoSans-Bold.ttf",
+            "/usr/share/fonts/liberation/LiberationSans-Bold.ttf"
         ])
 
     def _find_font(self, paths: List[str]) -> Optional[str]:
@@ -26,11 +31,11 @@ class ScreenshotEngine:
                 return p
         return None
 
-    def _get_font(self, size: int, mono: bool = True):
-        font_path = self.font_mono_path if mono else self.font_sans_path
-        if font_path:
+    def _get_font(self, size: int, mono: bool = True, bold: bool = False):
+        path = self.font_mono_path if mono else (self.font_bold_path if bold else self.font_sans_path)
+        if path:
             try:
-                return ImageFont.truetype(font_path, size)
+                return ImageFont.truetype(path, size)
             except Exception:
                 pass
         return ImageFont.load_default()
@@ -96,22 +101,8 @@ class ScreenshotEngine:
         img.save(str(output_image_path))
         return output_image_path
 
-    def render_mobile_screen(
-        self,
-        title: str,
-        topic: str,
-        code: str,
-        output_image_path: Path,
-        state: str = "initial",
-        fig_title: str = "",
-        step_index: int = 1
-    ) -> Path:
-        width, height = 400, 680
-        img = Image.new("RGB", (width, height), (248, 250, 252))
-        draw = ImageDraw.Draw(img)
-
-        font_header = self._get_font(16, mono=False)
-        font_body = self._get_font(13, mono=False)
+    def _draw_android_frame(self, draw: ImageDraw.Draw, width: int, height: int, step_index: int, app_title: str):
+        font_header = self._get_font(15, mono=False, bold=True)
         font_small = self._get_font(11, mono=False)
 
         # 1. Android Status Bar
@@ -119,24 +110,128 @@ class ScreenshotEngine:
         draw.text((16, 6), f"12:{10 + step_index:02d}", fill=(255, 255, 255), font=font_small)
         draw.text((width - 85, 6), "LTE  100%", fill=(255, 255, 255), font=font_small)
 
-        # 2. Android App Toolbar
+        # 2. Android Toolbar
         draw.rectangle([(0, 28), (width, 84)], fill=(37, 99, 235))
-        draw.text((20, 44), title[:28] if title else "Android App", fill=(255, 255, 255), font=font_header)
+        draw.text((20, 46), app_title[:30], fill=(255, 255, 255), font=font_header)
 
-        # Detect action type
-        text_check = (state + " " + fig_title).lower()
-        is_translate = any(w in text_check for w in ["translate", "перемещ", "движ"])
-        is_rotate = any(w in text_check for w in ["rotate", "вращ", "поворот"])
-        is_scale = any(w in text_check for w in ["scale", "масштаб", "увелич"])
-        is_second = any(w in text_check for w in ["втор", "second", "detail", "детал"])
+        # 3. Bottom Nav Bar
+        nav_y = height - 48
+        draw.rectangle([(0, nav_y), (width, height)], fill=(15, 23, 42))
+        draw.polygon([(width//4 - 8, nav_y + 24), (width//4 + 6, nav_y + 14), (width//4 + 6, nav_y + 34)], fill=(203, 213, 225))
+        draw.ellipse([(width//2 - 7, nav_y + 17), (width//2 + 7, nav_y + 31)], fill=(203, 213, 225))
+        draw.rectangle([(3*width//4 - 7, nav_y + 17), (3*width//4 + 7, nav_y + 31)], fill=(203, 213, 225))
 
-        # 3. Dynamic Card / Visual Area
+    def render_localization_screen(
+        self,
+        lang_code: str,
+        output_image_path: Path,
+        step_index: int = 1
+    ) -> Path:
+        width, height = 400, 680
+        img = Image.new("RGB", (width, height), (248, 250, 252))
+        draw = ImageDraw.Draw(img)
+
+        font_header = self._get_font(15, mono=False, bold=True)
+        font_body = self._get_font(13, mono=False)
+        font_small = self._get_font(11, mono=False)
+        font_bold = self._get_font(13, mono=False, bold=True)
+
+        app_titles = {
+            "ru": "Личные данные пользователя",
+            "be": "Асабістыя дадзеныя",
+            "en": "User Personal Profile",
+            "res": "Результат сохранения"
+        }
+        app_title = app_titles.get(lang_code, "Мобильное приложение")
+        self._draw_android_frame(draw, width, height, step_index, app_title)
+
+        # Language Switcher Bar
+        draw.text((24, 96), "Язык интерфейса / Language:", fill=(100, 116, 139), font=font_small)
+        pills = [("ru", "Русский"), ("be", "Беларуская"), ("en", "English")]
+        px = 24
+        for p_code, p_name in pills:
+            is_active = (p_code == lang_code)
+            p_bg = (37, 99, 235) if is_active else (241, 245, 249)
+            p_fg = (255, 255, 255) if is_active else (71, 85, 105)
+            p_w = 110
+            draw.rounded_rectangle([(px, 116), (px + p_w, 148)], radius=6, fill=p_bg)
+            draw.text((px + 12, 125), f"{p_code.upper()} • {p_name[:8]}", fill=p_fg, font=font_small)
+            px += p_w + 8
+
+        # Card Content
+        draw.rounded_rectangle([(24, 166), (width - 24, 460)], radius=12, fill=(255, 255, 255), outline=(226, 232, 240), width=1)
+
+        if lang_code == "res":
+            # Success result card
+            draw.ellipse([(width // 2 - 32, 195), (width // 2 + 32, 259)], fill=(220, 252, 231))
+            draw.text((width // 2 - 8, 214), "✓", fill=(16, 185, 129), font=font_header)
+            draw.text((width // 2 - 95, 276), "Данные успешно сохранены", fill=(15, 23, 42), font=font_bold)
+            draw.text((44, 315), "ФИО: Кашевич Евгений Николаевич", fill=(51, 65, 85), font=font_body)
+            draw.text((44, 345), "Учебная группа: ПМ-31", fill=(51, 65, 85), font=font_body)
+            draw.text((44, 375), "Текущая локаль: strings.xml (values-ru)", fill=(100, 116, 139), font=font_small)
+            draw.text((44, 405), "Статус: Запись добавлена в базу данных", fill=(16, 185, 129), font=font_small)
+            buttons = ("Назад в форму", "Редактировать профиль")
+        else:
+            field_data = {
+                "ru": [("Имя пользователя", "Евгений"), ("Фамилия", "Кашевич"), ("Учебная группа", "ПМ-31")],
+                "be": [("Імя карыстальніка", "Яўген"), ("Прозвішча", "Кашэвіч"), ("Вучэбная група", "ПМ-31")],
+                "en": [("First Name", "Eugene"), ("Last Name", "Kashevich"), ("Study Group", "PM-31")]
+            }.get(lang_code, [("Имя", "Евгений"), ("Группа", "ПМ-31")])
+
+            fy = 186
+            for lbl, val in field_data:
+                draw.text((40, fy), lbl, fill=(100, 116, 139), font=font_small)
+                draw.rounded_rectangle([(40, fy + 18), (width - 40, fy + 54)], radius=6, fill=(248, 250, 252), outline=(203, 213, 225), width=1)
+                draw.text((52, fy + 27), val, fill=(15, 23, 42), font=font_body)
+                fy += 66
+
+            badge_text = {
+                "ru": "Ресурсный каталог: res/values-ru/strings.xml",
+                "be": "Рэсурсны каталог: res/values-be/strings.xml",
+                "en": "Resource bundle: res/values-en/strings.xml"
+            }.get(lang_code, "")
+            draw.text((44, fy + 10), badge_text, fill=(37, 99, 235), font=font_small)
+
+            btn_data = {
+                "ru": ("Сохранить данные", "Очистить форму"),
+                "be": ("Захаваць дадзеныя", "Ачысціць форму"),
+                "en": ("Save Profile", "Clear Form")
+            }
+            buttons = btn_data.get(lang_code, ("Сохранить", "Сброс"))
+
+        # Action Buttons
+        b_y = 480
+        draw.rounded_rectangle([(24, b_y), (width - 24, b_y + 44)], radius=8, fill=(37, 99, 235))
+        draw.text((width // 2 - len(buttons[0]) * 4, b_y + 13), buttons[0], fill=(255, 255, 255), font=font_body)
+
+        draw.rounded_rectangle([(24, b_y + 52), (width - 24, b_y + 96)], radius=8, fill=(241, 245, 249))
+        draw.text((width // 2 - len(buttons[1]) * 4, b_y + 65), buttons[1], fill=(71, 85, 105), font=font_body)
+
+        output_image_path.parent.mkdir(parents=True, exist_ok=True)
+        img.save(str(output_image_path))
+        return output_image_path
+
+    def render_animation_screen(
+        self,
+        anim_type: str,
+        output_image_path: Path,
+        step_index: int = 1
+    ) -> Path:
+        width, height = 400, 680
+        img = Image.new("RGB", (width, height), (248, 250, 252))
+        draw = ImageDraw.Draw(img)
+
+        font_body = self._get_font(13, mono=False)
+        font_small = self._get_font(11, mono=False)
+
+        self._draw_android_frame(draw, width, height, step_index, "Animation Demo")
+
         draw.rounded_rectangle([(24, 108), (width - 24, 340)], radius=12, fill=(255, 255, 255), outline=(226, 232, 240), width=1)
 
         base_cx, base_cy = width // 2, 200
+        toast_text = ""
 
-        if is_translate:
-            # Ghost circle at origin with motion line
+        if anim_type == "translate":
             draw.ellipse([(base_cx - 35, base_cy - 35), (base_cx + 35, base_cy + 35)], outline=(203, 213, 225), width=2)
             draw.line([(base_cx, base_cy), (base_cx + 50, base_cy - 35)], fill=(37, 99, 235), width=2)
             cx, cy = base_cx + 50, base_cy - 35
@@ -145,8 +240,7 @@ class ScreenshotEngine:
             draw.ellipse([(cx - 7, cy - 7), (cx + 7, cy + 7)], fill=(255, 255, 255))
             status_text = "Анимация: Перемещение (X: +50, Y: -35)"
             toast_text = "Toast: Translate animation completed"
-
-        elif is_rotate:
+        elif anim_type == "rotate":
             cx, cy = base_cx, base_cy
             draw.arc([(cx - 52, cy - 52), (cx + 52, cy + 52)], start=30, end=330, fill=(37, 99, 235), width=3)
             draw.ellipse([(cx - 45, cy - 45), (cx + 45, cy + 45)], fill=(254, 243, 199))
@@ -154,45 +248,31 @@ class ScreenshotEngine:
             draw.ellipse([(cx - 6, cy - 6), (cx + 6, cy + 6)], fill=(255, 255, 255))
             status_text = "Анимация: Вращение (Rotate 360° вокруг центра)"
             toast_text = "Toast: Rotate animation completed"
-
-        elif is_scale:
+        elif anim_type == "scale":
             cx, cy = base_cx, base_cy
             draw.ellipse([(cx - 62, cy - 62), (cx + 62, cy + 62)], fill=(220, 252, 231))
             draw.rounded_rectangle([(cx - 28, cy - 28), (cx + 28, cy + 28)], radius=8, fill=(16, 185, 129))
             draw.ellipse([(cx - 11, cy - 11), (cx + 11, cy + 11)], fill=(255, 255, 255))
             status_text = "Анимация: Масштабирование (Увеличение 150%)"
             toast_text = "Toast: Scale animation (1.5x) completed"
-
-        elif is_second:
-            cx, cy = base_cx, base_cy
-            draw.rounded_rectangle([(36, 120), (width - 36, 240)], radius=8, fill=(241, 245, 249))
-            draw.text((48, 136), "Детальный просмотр объекта", fill=(30, 41, 59), font=font_body)
-            draw.text((48, 164), "Идентификатор: ID_035_RES", fill=(100, 116, 139), font=font_small)
-            draw.text((48, 190), "Параметры ресурса загружены успешно", fill=(16, 185, 129), font=font_small)
-            status_text = "Активность: DetailActivity запущена"
-            toast_text = "Toast: Экран переключен"
-
         else:
             cx, cy = base_cx, base_cy
             draw.ellipse([(cx - 45, cy - 45), (cx + 45, cy + 45)], fill=(219, 234, 254))
             draw.rounded_rectangle([(cx - 20, cy - 20), (cx + 20, cy + 20)], radius=6, fill=(37, 99, 235))
             draw.ellipse([(cx - 8, cy - 8), (cx + 8, cy + 8)], fill=(255, 255, 255))
-            status_text = "Статус: Готово к выполнению анимаций"
-            toast_text = ""
+            status_text = "Статус: Готово к запуску анимации"
 
-        screen_sub = fig_title if fig_title else topic
-        draw.text((44, 270), screen_sub[:40], fill=(30, 41, 59), font=font_body)
-        draw.text((44, 298), status_text[:45], fill=(37, 99, 235) if is_translate or is_rotate or is_scale else (16, 185, 129), font=font_small)
+        draw.text((44, 275), "Элемент анимации: ImageView", fill=(30, 41, 59), font=font_body)
+        draw.text((44, 302), status_text[:45], fill=(37, 99, 235) if anim_type != "initial" else (16, 185, 129), font=font_small)
 
-        # 4. Buttons (Highlight active button based on action)
+        # Buttons
         buttons = ["Перемещение (Translate)", "Вращение (Rotate)", "Масштаб (Scale)"]
         btn_y = 356
         for i, b_text in enumerate(buttons):
             is_active = (
-                (i == 0 and is_translate) or
-                (i == 1 and is_rotate) or
-                (i == 2 and is_scale) or
-                (i == 0 and not is_translate and not is_rotate and not is_scale and not is_second)
+                (i == 0 and anim_type == "translate") or
+                (i == 1 and anim_type == "rotate") or
+                (i == 2 and anim_type == "scale")
             )
             b_bg = (37, 99, 235) if is_active else (241, 245, 249)
             b_fg = (255, 255, 255) if is_active else (71, 85, 105)
@@ -200,17 +280,124 @@ class ScreenshotEngine:
             draw.text((width // 2 - len(b_text) * 3 - 6, btn_y + 12), b_text, fill=b_fg, font=font_body)
             btn_y += 50
 
-        # Toast notification
         if toast_text:
             draw.rounded_rectangle([(40, 530), (width - 40, 568)], radius=18, fill=(30, 41, 59))
             draw.text((width // 2 - len(toast_text) * 3 - 4, 542), toast_text, fill=(255, 255, 255), font=font_small)
 
-        # 5. Bottom Navigation Bar
-        nav_y = height - 48
-        draw.rectangle([(0, nav_y), (width, height)], fill=(15, 23, 42))
-        draw.polygon([(width//4 - 8, nav_y + 24), (width//4 + 6, nav_y + 14), (width//4 + 6, nav_y + 34)], fill=(203, 213, 225))
-        draw.ellipse([(width//2 - 7, nav_y + 17), (width//2 + 7, nav_y + 31)], fill=(203, 213, 225))
-        draw.rectangle([(3*width//4 - 7, nav_y + 17), (3*width//4 + 7, nav_y + 31)], fill=(203, 213, 225))
+        output_image_path.parent.mkdir(parents=True, exist_ok=True)
+        img.save(str(output_image_path))
+        return output_image_path
+
+    def render_database_screen(
+        self,
+        step_name: str,
+        output_image_path: Path,
+        step_index: int = 1
+    ) -> Path:
+        width, height = 400, 680
+        img = Image.new("RGB", (width, height), (248, 250, 252))
+        draw = ImageDraw.Draw(img)
+
+        font_body = self._get_font(13, mono=False)
+        font_small = self._get_font(11, mono=False)
+        font_bold = self._get_font(13, mono=False, bold=True)
+
+        self._draw_android_frame(draw, width, height, step_index, "База данных SQLite")
+
+        # Search bar
+        draw.rounded_rectangle([(24, 96), (width - 24, 134)], radius=8, fill=(255, 255, 255), outline=(203, 213, 225), width=1)
+        draw.text((36, 107), "🔍 Поиск по записям...", fill=(148, 163, 184), font=font_small)
+
+        # Records List
+        records = [
+            ("Кашевич Е.Н.", "Группа ПМ-31 • Отл.", "ID: 101"),
+            ("Иванов И.И.", "Группа ПМ-31 • Хор.", "ID: 102"),
+            ("Петров П.П.", "Группа ПМ-31 • Зачет", "ID: 103"),
+            ("Сидоров С.С.", "Группа ПМ-31 • Отл.", "ID: 104")
+        ]
+
+        if step_name in ["add", "filled"]:
+            # Form dialog overlay
+            draw.rounded_rectangle([(24, 150), (width - 24, 460)], radius=12, fill=(255, 255, 255), outline=(37, 99, 235), width=2)
+            draw.text((44, 170), "Добавление новой записи в БД", fill=(15, 23, 42), font=font_bold)
+
+            fields = [("ФИО студента", "Кашевич Е.Н."), ("Учебная группа", "ПМ-31"), ("Успеваемость", "9 (отлично)")]
+            fy = 205
+            for lbl, val in fields:
+                draw.text((44, fy), lbl, fill=(100, 116, 139), font=font_small)
+                draw.rounded_rectangle([(44, fy + 16), (width - 44, fy + 48)], radius=6, fill=(248, 250, 252), outline=(203, 213, 225), width=1)
+                draw.text((54, fy + 23), val if step_name == "filled" else "", fill=(15, 23, 42), font=font_body)
+                fy += 58
+
+            draw.rounded_rectangle([(44, 395), (width - 44, 435)], radius=6, fill=(37, 99, 235))
+            draw.text((width // 2 - 45, 406), "Вставить в SQLite", fill=(255, 255, 255), font=font_body)
+        else:
+            ry = 146
+            for idx, (name, grp, rec_id) in enumerate(records):
+                is_new = (idx == 0 and step_name == "result")
+                border_c = (16, 185, 129) if is_new else (226, 232, 240)
+                bg_c = (240, 253, 244) if is_new else (255, 255, 255)
+                draw.rounded_rectangle([(24, ry), (width - 24, ry + 64)], radius=8, fill=bg_c, outline=border_c, width=2 if is_new else 1)
+                draw.text((40, ry + 12), name, fill=(15, 23, 42), font=font_bold)
+                draw.text((40, ry + 36), grp, fill=(100, 116, 139), font=font_small)
+                draw.text((width - 85, ry + 24), rec_id, fill=(37, 99, 235), font=font_small)
+                ry += 74
+
+            # Floating Action Button (+)
+            draw.ellipse([(width - 76, height - 120), (width - 26, height - 70)], fill=(37, 99, 235))
+            draw.text((width - 56, height - 108), "+", fill=(255, 255, 255), font=font_bold)
+
+        output_image_path.parent.mkdir(parents=True, exist_ok=True)
+        img.save(str(output_image_path))
+        return output_image_path
+
+    def render_general_mobile_screen(
+        self,
+        title: str,
+        topic: str,
+        fig_title: str,
+        output_image_path: Path,
+        step_index: int = 1
+    ) -> Path:
+        width, height = 400, 680
+        img = Image.new("RGB", (width, height), (248, 250, 252))
+        draw = ImageDraw.Draw(img)
+
+        font_body = self._get_font(13, mono=False)
+        font_small = self._get_font(11, mono=False)
+        font_bold = self._get_font(13, mono=False, bold=True)
+
+        app_title = topic[:25] if topic else "Мобильное приложение"
+        self._draw_android_frame(draw, width, height, step_index, app_title)
+
+        # Card
+        draw.rounded_rectangle([(24, 108), (width - 24, 440)], radius=12, fill=(255, 255, 255), outline=(226, 232, 240), width=1)
+
+        # Header in card
+        screen_heading = fig_title if fig_title else f"Экран программы {step_index}"
+        draw.text((40, 128), screen_heading[:36], fill=(15, 23, 42), font=font_bold)
+        draw.text((40, 154), f"Шаг выполнения #{step_index} • Режим работы", fill=(100, 116, 139), font=font_small)
+
+        # Form / Info items
+        items = [
+            ("Пользователь", "Кашевич Е.Н."),
+            ("Учебная группа", "ПМ-31"),
+            ("Текущий статус", "Выполнено успешно"),
+            ("Параметр потока", f"Thread-ID: #00{step_index}")
+        ]
+        iy = 190
+        for lbl, val in items:
+            draw.text((40, iy), lbl, fill=(100, 116, 139), font=font_small)
+            draw.rounded_rectangle([(40, iy + 18), (width - 40, iy + 52)], radius=6, fill=(248, 250, 252), outline=(226, 232, 240), width=1)
+            draw.text((50, iy + 26), val, fill=(15, 23, 42), font=font_body)
+            iy += 62
+
+        # Action Buttons
+        draw.rounded_rectangle([(24, 460), (width - 24, 504)], radius=8, fill=(37, 99, 235))
+        draw.text((width // 2 - 50, 473), "Выполнить операцию", fill=(255, 255, 255), font=font_body)
+
+        draw.rounded_rectangle([(24, 514), (width - 24, 558)], radius=8, fill=(241, 245, 249))
+        draw.text((width // 2 - 45, 527), "Сброс параметров", fill=(71, 85, 105), font=font_body)
 
         output_image_path.parent.mkdir(parents=True, exist_ok=True)
         img.save(str(output_image_path))
@@ -228,7 +415,7 @@ class ScreenshotEngine:
         img = Image.new("RGB", (width, height), (248, 250, 252))
         draw = ImageDraw.Draw(img)
 
-        font_header = self._get_font(15, mono=False)
+        font_header = self._get_font(15, mono=False, bold=True)
         font_body = self._get_font(13, mono=False)
         font_small = self._get_font(11, mono=False)
 
@@ -303,34 +490,11 @@ class ScreenshotEngine:
         fig_title: str = "",
         step_index: int = 1
     ) -> Path:
-        """Intelligently detects whether to render an Android screen, UI Wireframe, or Terminal window."""
-        subj_lower = (subject or "").lower()
-        code_lower = (code or "").lower()
-        topic_lower = (topic or "").lower()
+        """Intelligently detects the topic domain and renders matching, realistic screenshots."""
+        context = (subject + " " + topic + " " + fig_title + " " + state + " " + code).lower()
 
-        is_design = (
-            "дизайн" in subj_lower or
-            "дизайн" in topic_lower or
-            "design" in subj_lower or
-            "design" in topic_lower or
-            "figma" in subj_lower or
-            "figma" in topic_lower or
-            "макет" in subj_lower or
-            "макет" in topic_lower or
-            "ui" in subj_lower or
-            "ux" in subj_lower or
-            ("интерфейс" in topic_lower and not code.strip())
-        )
-
-        is_mobile = (
-            "мобил" in subj_lower or
-            "android" in subj_lower or
-            "androidx" in code_lower or
-            "import android" in code_lower or
-            "setcontentview" in code_lower or
-            "activity" in code_lower
-        )
-
+        # 1. Design / Figma / UI/UX
+        is_design = any(w in context for w in ["дизайн", "design", "figma", "макет", "ui/ux"]) and not (code.strip() and "import" in code)
         if is_design:
             return self.render_ui_wireframe(
                 title=subject or "UI/UX Design Mockup",
@@ -339,21 +503,69 @@ class ScreenshotEngine:
                 step_index=step_index,
                 fig_title=fig_title
             )
-        elif is_mobile:
-            return self.render_mobile_screen(
-                title=subject or "Android Application",
-                topic=topic,
-                code=code,
-                output_image_path=output_image_path,
-                state=state,
+
+        # 2. Mobile App Check
+        is_mobile = any(w in context for w in [
+            "мобил", "android", "androidx", "import android", "setcontentview", "activity", "strings.xml"
+        ])
+
+        if is_mobile:
+            # Check domain: Localization
+            is_loc = any(w in context for w in ["локализ", "strings.xml", "values-ru", "values-be", "values-en", "locale", "язык", "белорус", "русск", "английск"])
+            if is_loc:
+                loc_check = (fig_title + " " + state).lower()
+                if "белорус" in loc_check or "be" in loc_check or (step_index == 2 and "результат" not in loc_check):
+                    lang = "be"
+                elif "англ" in loc_check or "en" in loc_check or (step_index == 3 and "результат" not in loc_check):
+                    lang = "en"
+                elif "результат" in loc_check or "сохранен" in loc_check or step_index == 4:
+                    lang = "res"
+                else:
+                    lang = "ru"
+                return self.render_localization_screen(lang, output_image_path, step_index)
+
+            # Check domain: Animation
+            is_anim = any(w in context for w in ["анимац", "translate", "rotate", "scale", "alpha"])
+            if is_anim:
+                anim_check = (fig_title + " " + state).lower()
+                if "translate" in anim_check or "перемещ" in anim_check:
+                    a_type = "translate"
+                elif "rotate" in anim_check or "вращ" in anim_check:
+                    a_type = "rotate"
+                elif "scale" in anim_check or "масштаб" in anim_check:
+                    a_type = "scale"
+                else:
+                    a_type = "initial"
+                return self.render_animation_screen(a_type, output_image_path, step_index)
+
+            # Check domain: Database / SQLite / ListView
+            is_db = any(w in context for w in ["баз", "sqlite", "db", "listview", "recyclerview", "запис", "cursor"])
+            if is_db:
+                db_check = (fig_title + " " + state).lower()
+                if "добав" in db_check or "ввод" in db_check or step_index == 2:
+                    s_name = "add"
+                elif "заполн" in db_check or step_index == 3:
+                    s_name = "filled"
+                elif "результат" in db_check or step_index == 4:
+                    s_name = "result"
+                else:
+                    s_name = "list"
+                return self.render_database_screen(s_name, output_image_path, step_index)
+
+            # General Mobile Screen (Adaptive to fig_title)
+            return self.render_general_mobile_screen(
+                title=subject or "Android App",
+                topic=topic or "Мобильное приложение",
                 fig_title=fig_title,
+                output_image_path=output_image_path,
                 step_index=step_index
             )
-        else:
-            term_title = f"Terminal — Тест #{step_index}: {fig_title[:35]}" if fig_title else f"Terminal — mugo@arch: ~/labs"
-            return self.render_terminal(
-                command=command,
-                output_text=output_text,
-                output_image_path=output_image_path,
-                title=term_title
-            )
+
+        # 3. Console / Algorithm / Terminal
+        term_title = f"Terminal — Тест #{step_index}: {fig_title[:35]}" if fig_title else "Terminal — mugo@arch: ~/labs"
+        return self.render_terminal(
+            command=command,
+            output_text=output_text,
+            output_image_path=output_image_path,
+            title=term_title
+        )

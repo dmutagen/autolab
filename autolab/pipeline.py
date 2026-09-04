@@ -31,7 +31,9 @@ class LabPipeline:
         uploaded_file: Optional[Path] = None,
         user_screenshots: Optional[List[Path]] = None,
         with_title_page: bool = False,
-        custom_instructions: str = ""
+        custom_instructions: str = "",
+        photos_layout: str = "side_by_side",
+        include_screenshot_intro: bool = True
     ) -> Dict[str, Any]:
         job_id = uuid.uuid4().hex[:8]
         job_output_dir = OUTPUT_DIR / f"lab_{job_id}"
@@ -211,7 +213,9 @@ class LabPipeline:
             screenshots=screenshots_to_embed,
             with_title_page=with_title_page,
             include_theory=include_theory,
-            user_variant=variant
+            user_variant=variant,
+            photos_layout=photos_layout,
+            include_screenshot_intro=include_screenshot_intro
         )
         log(f"6. Готово! Файл сохранен: {docx_path.name}")
 

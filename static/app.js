@@ -277,6 +277,14 @@ async function generateLab(e) {
     formData.append("custom_instructions", customInstr);
   }
   formData.append("with_title_page", document.getElementById("titlePageCheckbox").checked);
+  const layoutSel = document.getElementById("photosLayoutSelect");
+  if (layoutSel) {
+    formData.append("photos_layout", layoutSel.value);
+  }
+  const introCb = document.getElementById("screenshotIntroCheckbox");
+  if (introCb) {
+    formData.append("include_screenshot_intro", introCb.checked);
+  }
 
   if (selectedFile) {
     formData.append("file", selectedFile);
